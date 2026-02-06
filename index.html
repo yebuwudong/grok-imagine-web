@@ -1,0 +1,1201 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0A0E1A">
+
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="mobile-web-app-capable" content="yes">
+
+  <title>Grok Imagine</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            primary: '#00E5FF',
+            accent: '#C084FC',
+            bg: '#0A0E1A',
+            panel: '#131C31',
+            card: '#1E293B'
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      background: linear-gradient(to bottom, #0A0E1A, #111827);
+      overscroll-behavior: none;
+    }
+    .glass { background: rgba(19, 28, 49, 0.7); backdrop-filter: blur(20px); border: 1px solid rgba(0, 229, 255, 0.2); }
+    .card { transition: all 0.4s ease; position: relative; }
+    .card:hover { transform: translateY(-10px); box-shadow: 0 25px 50px rgba(0, 229, 255, 0.2); }
+    .card img, .card video { transition: transform 0.6s ease; }
+    .card:hover img, .card:hover video { transform: scale(1.1); }
+    .btn-gradient { background: linear-gradient(135deg, #00E5FF, #C084FC); }
+    .btn-gradient:hover { background: linear-gradient(135deg, #C084FC, #00E5FF); }
+    .spinner { animation: spin 1.2s linear infinite; }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+    .main-container {
+      flex-direction: column;
+      overflow-y: auto;
+      height: 100vh;
+      padding: 0.5rem;
+      padding-top: 4.5rem;
+      padding-bottom: 4rem;
+    }
+
+    .results-section {
+      margin-top: 1rem;
+    }
+
+    @media (orientation: landscape) {
+      .main-container {
+        padding: 0;
+        padding-top: 4.5rem;
+        padding-bottom: 4rem;
+      }
+      .input-panel {
+        padding: 0.5rem;
+      }
+      .glass {
+        border-radius: 0;
+      }
+    }
+
+    .overlay {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: linear-gradient(to top, rgba(0,0,0,0.9), transparent);
+      padding: 1.5rem;
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: none;
+    }
+    .card:hover .overlay, .card.touched .overlay { opacity: 1; pointer-events: auto; }
+
+    .select-checkbox {
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s;
+    }
+    .multi-select-mode .select-checkbox {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    #results {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 1rem;
+      width: 100%;
+    }
+
+    #selectionBar {
+      position: sticky;
+      top: 0;
+      background: rgba(19, 28, 49, 0.9);
+      backdrop-filter: blur(10px);
+      padding: 1rem;
+      border-radius: 1rem;
+      margin-bottom: 1rem;
+      z-index: 20;
+    }
+
+    #clearHistoryWrapper {
+      position: fixed;
+      top: 0.75rem;
+      right: 0.75rem;
+      z-index: 50;
+    }
+
+    #generationProgress {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 50;
+      background: rgba(19, 28, 49, 0.9);
+      backdrop-filter: blur(12px);
+      border-top: 1px solid rgba(0, 229, 255, 0.3);
+      padding: 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      transition: transform 0.3s ease;
+      transform: translateY(100%);
+    }
+    #generationProgress.show {
+      transform: translateY(0);
+    }
+
+    .config-modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.85);
+      backdrop-filter: blur(12px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+  </style>
+</head>
+<body class="text-gray-100 h-screen flex flex-col overflow-hidden">
+
+  <div id="configModal" class="config-modal hidden">
+    <div class="glass rounded-3xl p-8 max-w-md w-full mx-4 shadow-2xl">
+      <h2 class="text-2xl font-bold mb-6 text-center"><i class="fas fa-cog mr-2 text-primary"></i> API 配置</h2>
+      <div class="mb-5">
+        <label class="block text-sm font-medium mb-2">API Base URL <span class="text-red-400">*</span></label>
+        <input id="configBase" type="url" placeholder="https://example.com/v1" class="w-full px-4 py-3 bg-panel rounded-2xl border border-gray-700 focus:border-primary focus:outline-none">
+      </div>
+      <div class="mb-5">
+        <label class="block text-sm font-medium mb-2">API Key <span class="text-red-400">*</span></label>
+        <input id="configKey" type="password" placeholder="sk-..." class="w-full px-4 py-3 bg-panel rounded-2xl border border-gray-700 focus:border-primary focus:outline-none">
+      </div>
+      <div class="mb-6">
+        <label class="block text-sm font-medium mb-2">历史记录 Key（可选，默认：grok_imagine_history）</label>
+        <input id="configHistoryKey" type="text" placeholder="grok_imagine_history" class="w-full px-4 py-3 bg-panel rounded-2xl border border-gray-700 focus:border-primary focus:outline-none">
+      </div>
+      <div class="flex gap-3">
+        <button id="saveConfig" class="flex-1 py-3 btn-gradient rounded-2xl font-bold shadow-lg">保存并继续</button>
+        <button id="closeConfig" class="flex-1 py-3 bg-gray-700 rounded-2xl font-bold">取消</button>
+      </div>
+      <p class="text-xs text-gray-400 text-center mt-4">配置仅保存在你的浏览器本地，不会上传到任何服务器</p>
+    </div>
+  </div>
+
+  <div class="fixed top-0.75rem left-0.75rem z-50">
+    <button id="openConfig" class="px-5 py-3 bg-panel/80 hover:bg-panel rounded-xl text-base font-medium shadow-lg">
+      <i class="fas fa-cog text-xl"></i>
+    </button>
+  </div>
+
+  <div id="clearHistoryWrapper">
+    <button id="clearHistory" class="px-5 py-3 bg-red-600/80 hover:bg-red-700 rounded-xl text-base font-medium shadow-lg">
+      <i class="fas fa-trash mr-2"></i> 清除历史
+    </button>
+  </div>
+
+  <div class="flex-1 main-container">
+    <div class="input-panel">
+      <div class="glass rounded-3xl p-6 flex flex-col shadow-2xl">
+        <div class="mb-5">
+          <label class="flex items-center text-base font-medium mb-2">
+            <i class="fas fa-robot mr-2 text-primary"></i> 模型
+          </label>
+          <select id="model" class="w-full px-4 py-3 bg-panel rounded-2xl border border-gray-700 focus:border-primary focus:outline-none text-base">
+            <option value="grok-imagine-1.0">grok-imagine-1.0（图像）</option>
+            <option value="grok-imagine-1.0-video">grok-imagine-1.0-video（视频）</option>
+          </select>
+        </div>
+
+        <div class="mb-5">
+          <label class="flex items-center text-base font-medium mb-2">
+            <i class="fas fa-pen-nib mr-2 text-primary"></i> 提示词
+          </label>
+          <textarea id="prompt" rows="6" placeholder="输入详细描述，越具体效果越好...（最多1000字符）"
+                    maxlength="1000"
+                    class="w-full px-4 py-3 bg-panel rounded-2xl border border-gray-700 focus:border-primary resize-none text-base"></textarea>
+          <div class="text-right text-xs text-gray-400 mt-2">已用 <span id="charCount">0</span> / 最多 1000 字符</div>
+        </div>
+
+        <div class="flex flex-col lg:flex-row gap-6 mb-5">
+          <div class="flex-1 min-w-0">
+            <label class="flex items-center text-base font-medium mb-2">
+              <i class="fas fa-image mr-2 text-primary"></i> 参考图像（可选）
+            </label>
+            <input type="file" id="inputImage" accept="image/*" class="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-xl file:bg-primary file:text-black file:font-bold file:border-0">
+            <div id="previewContainer" class="mt-4 relative hidden">
+              <div class="bg-panel/70 rounded-3xl p-4 shadow-2xl">
+                <img id="preview" class="block mx-auto max-w-full max-h-[40vh] h-auto rounded-2xl object-contain shadow-lg" alt="参考图像预览">
+              </div>
+              <button id="clearImage" class="absolute top-6 right-6 bg-red-600 hover:bg-red-700 rounded-full p-3 text-white shadow-lg">
+                <i class="fas fa-times text-xl"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div id="nParam">
+              <label class="block text-sm mb-1 text-gray-400">生成数量</label>
+              <select id="img-n" class="w-full px-3 py-2 bg-panel rounded-xl border border-gray-700 text-sm">
+                <option value="1">1 张</option>
+                <option value="2">2 张</option>
+                <option value="3">3 张</option>
+                <option value="4" selected>4 张</option>
+                <option value="6">6 张</option>
+                <option value="8">8 张</option>
+                <option value="10">10 张</option>
+              </select>
+            </div>
+            <div id="strengthParam" class="hidden">
+              <label class="block text-sm mb-1 text-gray-400">变化强度</label>
+              <select id="strength" class="w-full px-3 py-2 bg-panel rounded-xl border border-gray-700 text-sm">
+                <option value="0.3">低 (0.3)</option>
+                <option value="0.5">中 (0.5)</option>
+                <option value="0.75" selected>高 (0.75)</option>
+                <option value="0.9">很高 (0.9)</option>
+              </select>
+            </div>
+            <div id="aspectParam" class="hidden sm:col-span-2">
+              <label class="block text-sm mb-1 text-gray-400">宽高比</label>
+              <select id="aspect" class="w-full px-3 py-2 bg-panel rounded-xl border border-gray-700 text-sm">
+                <option value="16:9">16:9 (横版)</option>
+                <option value="9:16">9:16 (竖版)</option>
+                <option value="1:1">1:1 (方形)</option>
+              </select>
+            </div>
+            <div id="lengthParam" class="hidden sm:col-span-2">
+              <label class="block text-sm mb-1 text-gray-400">视频时长</label>
+              <select id="length" class="w-full px-3 py-2 bg-panel rounded-xl border border-gray-700 text-sm">
+                <option value="6">6 秒</option>
+                <option value="10" selected>10 秒</option>
+                <option value="15">15 秒</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <button id="generateBtn" class="w-full py-5 text-xl font-bold btn-gradient rounded-2xl shadow-2xl hover:scale-105 transition disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100">
+          <i class="fas fa-magic mr-2"></i> 生成
+        </button>
+      </div>
+    </div>
+
+    <div class="results-section flex-1 flex flex-col">
+      <div id="selectionBar" class="hidden">
+        <div class="flex items-center justify-between">
+          <span class="text-lg">已选中 <span id="selectedCount">0</span> 个</span>
+          <div class="flex gap-3">
+            <button id="selectAll" class="px-5 py-2 bg-gray-700 rounded-xl text-sm font-medium">
+              全选
+            </button>
+            <button id="downloadSelected" class="px-5 py-2 btn-gradient rounded-xl text-sm font-medium">
+              <i class="fas fa-download mr-1"></i> 下载选中
+            </button>
+            <button id="cancelSelection" class="px-5 py-2 bg-gray-700 rounded-xl text-sm font-medium">
+              取消选中
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex-1">
+        <div id="results" class="pt-4 pb-4"></div>
+        <div id="empty" class="text-center py-20 text-gray-500 flex-1 flex flex-col items-center justify-center">
+          <i class="fas fa-sparkles text-6xl mb-4 opacity-20"></i>
+          <p class="text-lg">结果将显示在这里（刷新页面也不会丢失）</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="generationProgress">
+    <i class="fas fa-spinner spinner text-3xl text-primary"></i>
+    <p class="text-lg font-medium">生成中，请稍候...</p>
+  </div>
+
+  <div id="error" class="fixed bottom-20 left-1/2 -translate-x-1/2 hidden z-50 max-w-[90vw]">
+    <div class="bg-red-900/90 rounded-2xl px-6 py-4 text-base shadow-2xl">
+      <i class="fas fa-exclamation-triangle mr-2"></i> <span id="errorText"></span>
+    </div>
+  </div>
+
+  <script>
+    'use strict';
+
+    const MAX_PROMPT_LENGTH = 1000;
+    const MAX_HISTORY_ITEMS = 50;
+    const MAX_STORAGE_SIZE = 4 * 1024 * 1024;
+
+    const Config = {
+      storageKey: 'grok_imagine_config',
+      defaults: {
+        base: '',
+        key: '',
+        historyKey: 'grok_imagine_history'
+      },
+
+      load() {
+        const params = new URLSearchParams(location.search);
+        const fromUrl = {
+          base: params.get('base') || '',
+          key: params.get('key') || '',
+          historyKey: params.get('historyKey') || this.defaults.historyKey
+        };
+
+        if (fromUrl.base && fromUrl.key) {
+          this.save(fromUrl);
+          return fromUrl;
+        }
+
+        try {
+          const saved = localStorage.getItem(this.storageKey);
+          if (saved) {
+            return { ...this.defaults, ...JSON.parse(saved) };
+          }
+        } catch (e) {
+          console.error('加载配置失败', e);
+        }
+
+        return { ...this.defaults };
+      },
+
+      save(config) {
+        try {
+          localStorage.setItem(this.storageKey, JSON.stringify(config));
+        } catch (e) {
+          console.error('保存配置失败', e);
+        }
+      },
+
+      isValid(config) {
+        return config.base && config.key && config.base.trim() && config.key.trim();
+      }
+    };
+
+    let config = Config.load();
+    let HISTORY_KEY = config.historyKey;
+
+    const elements = {
+      model: document.getElementById('model'),
+      prompt: document.getElementById('prompt'),
+      charCount: document.getElementById('charCount'),
+      inputImage: document.getElementById('inputImage'),
+      preview: document.getElementById('preview'),
+      previewContainer: document.getElementById('previewContainer'),
+      clearImage: document.getElementById('clearImage'),
+      imgN: document.getElementById('img-n'),
+      strength: document.getElementById('strength'),
+      aspect: document.getElementById('aspect'),
+      length: document.getElementById('length'),
+      nParam: document.getElementById('nParam'),
+      strengthParam: document.getElementById('strengthParam'),
+      aspectParam: document.getElementById('aspectParam'),
+      lengthParam: document.getElementById('lengthParam'),
+      generateBtn: document.getElementById('generateBtn'),
+      results: document.getElementById('results'),
+      empty: document.getElementById('empty'),
+      generationProgress: document.getElementById('generationProgress'),
+      error: document.getElementById('error'),
+      errorText: document.getElementById('errorText'),
+      clearHistory: document.getElementById('clearHistory'),
+      selectionBar: document.getElementById('selectionBar'),
+      selectedCount: document.getElementById('selectedCount'),
+      downloadSelected: document.getElementById('downloadSelected'),
+      cancelSelection: document.getElementById('cancelSelection'),
+      selectAll: document.getElementById('selectAll'),
+      configModal: document.getElementById('configModal'),
+      configBase: document.getElementById('configBase'),
+      configKey: document.getElementById('configKey'),
+      configHistoryKey: document.getElementById('configHistoryKey'),
+      saveConfig: document.getElementById('saveConfig'),
+      closeConfig: document.getElementById('closeConfig'),
+      openConfig: document.getElementById('openConfig')
+    };
+
+    const state = { base64Image: null, blobUrls: new Set() };
+    let selectedCards = new Set();
+    let multiSelectMode = false;
+
+    const BlobManager = {
+      add(url) { state.blobUrls.add(url); },
+      revoke(url) { if (state.blobUrls.has(url)) { URL.revokeObjectURL(url); state.blobUrls.delete(url); } },
+      revokeAll() { state.blobUrls.forEach(url => URL.revokeObjectURL(url)); state.blobUrls.clear(); }
+    };
+
+    function enableMultiSelectMode() {
+      if (multiSelectMode) return;
+      multiSelectMode = true;
+      document.body.classList.add('multi-select-mode');
+      updateSelectionBar();
+    }
+
+    function disableMultiSelectMode() {
+      multiSelectMode = false;
+      document.body.classList.remove('multi-select-mode');
+      selectedCards.clear();
+      updateSelectionBar();
+    }
+
+    function toggleCardSelection(card) {
+      const checkbox = card.querySelector('.select-checkbox');
+      checkbox.checked = !checkbox.checked;
+      if (checkbox.checked) {
+        selectedCards.add(card);
+      } else {
+        selectedCards.delete(card);
+      }
+      updateSelectionBar();
+
+      if (selectedCards.size === 0) {
+        disableMultiSelectMode();
+      }
+    }
+
+    function updateSelectionBar() {
+      if (selectedCards.size > 0) {
+        elements.selectedCount.textContent = selectedCards.size;
+        elements.selectionBar.classList.remove('hidden');
+      } else {
+        elements.selectionBar.classList.add('hidden');
+      }
+    }
+
+    const History = {
+      load() {
+        try {
+          const saved = localStorage.getItem(HISTORY_KEY);
+          if (saved) {
+            const items = JSON.parse(saved);
+            if (!Array.isArray(items)) {
+              localStorage.removeItem(HISTORY_KEY);
+              return;
+            }
+            
+            items.forEach((item) => {
+              if (!item || !item.url) return;
+              const card = item.isVideo 
+                ? Atoms.createPlaceholderVideoCard(item.url, item.prompt) 
+                : Atoms.createPlaceholderCard(item.url, item.prompt);
+              
+              card.dataset.isVideo = item.isVideo;
+              card.dataset.prompt = item.prompt || '';
+
+              elements.results.appendChild(card);
+              if (item.isVideo) Atoms.loadVideoPreview(card, item.url);
+              else Atoms.loadImagePreview(card, item.url);
+            });
+            if (items.length > 0) elements.empty.classList.add('hidden');
+          }
+        } catch (e) {
+          console.error('加载历史记录失败:', e);
+          localStorage.removeItem(HISTORY_KEY);
+        }
+      },
+
+      save(url, isVideo, prompt) {
+        try {
+          const currentSize = new Blob([localStorage.getItem(HISTORY_KEY) || '']).size;
+          if (currentSize > MAX_STORAGE_SIZE) {
+            localStorage.removeItem(HISTORY_KEY);
+          }
+
+          const saved = localStorage.getItem(HISTORY_KEY);
+          const items = saved ? JSON.parse(saved) : [];
+          
+          if (items.some(item => item.url === url)) return;
+          
+          items.unshift({ 
+            url, 
+            isVideo, 
+            prompt: prompt.substring(0, 200),
+            timestamp: Date.now() 
+          });
+          
+          if (items.length > MAX_HISTORY_ITEMS) items.length = MAX_HISTORY_ITEMS;
+          localStorage.setItem(HISTORY_KEY, JSON.stringify(items));
+        } catch (e) {
+          console.error('保存历史记录失败:', e);
+        }
+      },
+
+      clear() {
+        localStorage.removeItem(HISTORY_KEY);
+        elements.results.innerHTML = '';
+        elements.empty.classList.remove('hidden');
+        BlobManager.revokeAll();
+        selectedCards.clear();
+        disableMultiSelectMode();
+        updateSelectionBar();
+      }
+    };
+
+    const Atoms = {
+      extractUrl(content) {
+        if (!content) return null;
+        if (typeof content !== 'string') return null;
+        
+        content = content.replace(/```[\s\S]*?```/g, '').trim();
+        
+        if (content.startsWith('http') || content.startsWith('/')) return content;
+        
+        const markdownMatch = content.match(/!\[([^\]]*)\]\((https?:\/\/[^\)]+)\)/);
+        if (markdownMatch) return markdownMatch[2];
+        
+        const urlMatch = content.match(/(https?:\/\/[^\s<>"{}|\\^`\[\]]+)/);
+        if (urlMatch) return urlMatch[1];
+        
+        return null;
+      },
+
+      createPlaceholderCard(url, prompt) {
+        const card = document.createElement('div');
+        card.className = 'card rounded-2xl glass overflow-hidden relative';
+        card.dataset.url = url;
+        card.dataset.prompt = prompt || '';
+
+        card.innerHTML = `
+          <input type="checkbox" class="select-checkbox absolute top-4 left-4 z-20 w-6 h-6 accent-primary rounded">
+          <div class="aspect-square bg-panel/50 flex items-center justify-center relative overflow-hidden">
+            <i class="fas fa-spinner spinner text-5xl text-primary"></i>
+          </div>
+          <div class="overlay">
+            <div class="text-xs text-gray-300 mb-2 line-clamp-2">${prompt || ''}</div>
+            <a class="single-download block text-center py-3 btn-gradient rounded-xl text-black font-bold text-sm w-full mb-2">
+              <i class="fas fa-download mr-1"></i> 下载图像
+            </a>
+            <button type="button" class="copy-prompt-btn block text-center py-2 bg-panel rounded-xl text-white text-xs w-full hover:bg-panel/80">
+              <i class="fas fa-copy mr-1"></i> 复制提示词
+            </button>
+          </div>
+        `;
+
+        card.addEventListener('touchstart', () => card.classList.add('touched'), { passive: true });
+        card.addEventListener('touchend', () => card.classList.remove('touched'), { passive: true });
+
+        card.addEventListener('dblclick', (e) => {
+          e.preventDefault();
+          enableMultiSelectMode();
+          toggleCardSelection(card);
+        });
+
+        card.addEventListener('click', (e) => {
+          if (!multiSelectMode) return;
+          const clickedButton = e.target.closest('button') || e.target.closest('a');
+          if (clickedButton) return;
+          e.preventDefault();
+          toggleCardSelection(card);
+        });
+
+        card.querySelector('.single-download').addEventListener('click', async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          await downloadFile(url);
+        });
+
+        card.querySelector('.copy-prompt-btn').addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          navigator.clipboard.writeText(card.dataset.prompt).then(() => {
+            const btn = e.target.closest('button');
+            const orig = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-check mr-1"></i> 已复制';
+            setTimeout(() => btn.innerHTML = orig, 2000);
+          });
+        });
+
+        return card;
+      },
+
+      createPlaceholderVideoCard(url, prompt) {
+        const card = document.createElement('div');
+        card.className = 'card rounded-2xl glass overflow-hidden relative';
+        card.dataset.url = url;
+        card.dataset.prompt = prompt || '';
+
+        card.innerHTML = `
+          <input type="checkbox" class="select-checkbox absolute top-4 left-4 z-20 w-6 h-6 accent-primary rounded">
+          <div class="aspect-video bg-panel/50 flex items-center justify-center relative overflow-hidden video-container">
+            <i class="fas fa-spinner spinner text-5xl text-primary"></i>
+          </div>
+          <div class="overlay">
+            <div class="text-xs text-gray-300 mb-2 line-clamp-2">${prompt || ''}</div>
+            <a class="single-download block text-center py-3 btn-gradient rounded-xl text-black font-bold text-sm w-full mb-2">
+              <i class="fas fa-download mr-1"></i> 下载视频
+            </a>
+            <div class="grid grid-cols-2 gap-2">
+              <button type="button" class="copy-url-btn block text-center py-2 bg-panel rounded-xl text-white text-xs hover:bg-panel/80">
+                <i class="fas fa-link mr-1"></i> 复制链接
+              </button>
+              <button type="button" class="copy-prompt-btn block text-center py-2 bg-panel rounded-xl text-white text-xs hover:bg-panel/80">
+                <i class="fas fa-copy mr-1"></i> 提示词
+              </button>
+            </div>
+          </div>
+        `;
+
+        card.addEventListener('touchstart', () => card.classList.add('touched'), { passive: true });
+        card.addEventListener('touchend', () => card.classList.remove('touched'), { passive: true });
+
+        card.addEventListener('dblclick', (e) => {
+          e.preventDefault();
+          enableMultiSelectMode();
+          toggleCardSelection(card);
+        });
+
+        card.addEventListener('click', (e) => {
+          if (!multiSelectMode) return;
+          const clickedButton = e.target.closest('button') || e.target.closest('a');
+          if (clickedButton) return;
+          e.preventDefault();
+          toggleCardSelection(card);
+        });
+
+        card.querySelector('.single-download').addEventListener('click', async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          await downloadFile(url);
+        });
+
+        card.querySelector('.copy-url-btn').addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          navigator.clipboard.writeText(url).then(() => {
+            const btn = e.target.closest('button');
+            const orig = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-check mr-1"></i> 已复制';
+            setTimeout(() => btn.innerHTML = orig, 2000);
+          });
+        });
+
+        card.querySelector('.copy-prompt-btn').addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          navigator.clipboard.writeText(card.dataset.prompt).then(() => {
+            const btn = e.target.closest('button');
+            const orig = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-check mr-1"></i> 已复制';
+            setTimeout(() => btn.innerHTML = orig, 2000);
+          });
+        });
+
+        return card;
+      },
+
+      async loadImagePreview(card, url) {
+        const placeholder = card.querySelector('.aspect-square');
+        let retryCount = 0;
+        
+        const tryLoad = async () => {
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000);
+            
+            const response = await fetch(url, { signal: controller.signal });
+            clearTimeout(timeoutId);
+            
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            
+            const blob = await response.blob();
+            const blobUrl = URL.createObjectURL(blob);
+            BlobManager.add(blobUrl);
+            
+            const img = document.createElement('img');
+            img.src = blobUrl;
+            img.className = 'w-full h-full object-cover';
+            img.alt = card.dataset.prompt || '生成的图像';
+            
+            img.onload = () => {
+              placeholder.innerHTML = '';
+              placeholder.appendChild(img);
+            };
+            
+            img.onerror = () => {
+              BlobManager.revoke(blobUrl);
+              throw new Error('图片加载失败');
+            };
+            
+          } catch (e) {
+            console.error(`加载图像失败 (尝试 ${retryCount + 1}/3):`, e);
+            if (retryCount < 2) {
+              retryCount++;
+              setTimeout(tryLoad, 1000 * retryCount);
+            } else {
+              placeholder.innerHTML = `
+                <div class="text-center p-4">
+                  <i class="fas fa-exclamation-circle text-3xl text-red-500 mb-2"></i>
+                  <p class="text-gray-400 text-xs">加载失败<br>点击下载查看</p>
+                </div>
+              `;
+            }
+          }
+        };
+        
+        tryLoad();
+      },
+
+      async loadVideoPreview(card, url) {
+        const placeholder = card.querySelector('.video-container');
+
+        const tryDirectLoad = () => {
+          const video = document.createElement('video');
+          video.controls = true;
+          video.preload = 'metadata';
+          video.muted = true;
+          video.playsInline = true;
+          video.loop = true;
+          video.autoplay = true;
+          video.className = 'w-full h-full object-cover';
+
+          const source = document.createElement('source');
+          source.src = url;
+          source.type = 'video/mp4';
+          video.appendChild(source);
+
+          video.onloadedmetadata = () => {
+            placeholder.innerHTML = '';
+            placeholder.appendChild(video);
+            video.play().catch(() => {});
+          };
+
+          video.onerror = () => {
+            loadVideoAsBlob();
+          };
+
+          setTimeout(() => {
+            if (video.readyState < 2) {
+              video.onerror();
+            }
+          }, 10000);
+        };
+
+        const loadVideoAsBlob = async () => {
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+            const response = await fetch(url, { signal: controller.signal });
+            clearTimeout(timeoutId);
+
+            if (!response.ok) throw new Error('Fetch failed');
+
+            const blob = await response.blob();
+            const blobUrl = URL.createObjectURL(blob);
+            BlobManager.add(blobUrl);
+
+            const video = document.createElement('video');
+            video.controls = true;
+            video.muted = true;
+            video.playsInline = true;
+            video.loop = true;
+            video.autoplay = true;
+            video.className = 'w-full h-full object-cover';
+
+            const source = document.createElement('source');
+            source.src = blobUrl;
+            source.type = 'video/mp4';
+            video.appendChild(source);
+
+            video.onloadeddata = () => {
+              placeholder.innerHTML = '';
+              placeholder.appendChild(video);
+              video.play().catch(() => {});
+            };
+
+            video.onerror = () => {
+              BlobManager.revoke(blobUrl);
+              throw new Error('Blob video failed');
+            };
+
+          } catch (e) {
+            console.error('视频预览完全失败:', e);
+            placeholder.innerHTML = `
+              <div class="flex flex-col items-center justify-center h-full text-center p-8">
+                <i class="fas fa-play-circle text-6xl text-primary mb-4 opacity-50"></i>
+                <p class="text-gray-400 text-sm">预览不可用<br>请使用“复制链接”或“下载”查看视频</p>
+              </div>
+            `;
+          }
+        };
+
+        tryDirectLoad();
+      },
+
+      showProgress() {
+        elements.generationProgress.classList.add('show');
+        elements.generateBtn.disabled = true;
+      },
+
+      hideProgress() {
+        elements.generationProgress.classList.remove('show');
+        elements.generateBtn.disabled = false;
+      },
+
+      showError(message) {
+        console.error('错误:', message);
+        elements.errorText.textContent = message;
+        elements.error.classList.remove('hidden');
+        setTimeout(() => elements.error.classList.add('hidden'), 5000);
+      },
+
+      async apiPost(endpoint, body) {
+        if (!Config.isValid(config)) {
+          throw new Error('API 配置未完成，请先在设置中填写 Base URL 和 Key');
+        }
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 120000);
+        
+        try {
+          const headers = {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${config.key}`
+          };
+          
+          const res = await fetch(config.base + endpoint, { 
+            method: 'POST', 
+            headers, 
+            body: JSON.stringify(body),
+            signal: controller.signal
+          });
+          
+          clearTimeout(timeoutId);
+          
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.error?.message || `请求失败: HTTP ${res.status}`);
+          }
+          return await res.json();
+        } catch (e) {
+          clearTimeout(timeoutId);
+          if (e.name === 'AbortError') {
+            throw new Error('请求超时，请稍后重试');
+          }
+          throw e;
+        }
+      }
+    };
+
+    async function downloadFile(url) {
+      try {
+        const filename = url.split('/').pop().split('?')[0] || 'grok_file';
+
+        const response = await fetch(url);
+        if (!response.ok) throw new Error();
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(blobUrl);
+      } catch (e) {
+        alert('下载失败，请手动长按保存');
+      }
+    }
+
+    elements.downloadSelected.addEventListener('click', async () => {
+      const cards = Array.from(selectedCards);
+      for (let i = 0; i < cards.length; i++) {
+        const card = cards[i];
+        await downloadFile(card.dataset.url);
+        if (i < cards.length - 1) {
+          await new Promise(r => setTimeout(r, 2000));
+        }
+      }
+    });
+
+    elements.cancelSelection.addEventListener('click', () => {
+      selectedCards.clear();
+      document.querySelectorAll('.select-checkbox').forEach(cb => cb.checked = false);
+      disableMultiSelectMode();
+      updateSelectionBar();
+    });
+
+    elements.selectAll.addEventListener('click', () => {
+      document.querySelectorAll('.card').forEach(card => {
+        const checkbox = card.querySelector('.select-checkbox');
+        if (!checkbox.checked) {
+          checkbox.checked = true;
+          selectedCards.add(card);
+        }
+      });
+      updateSelectionBar();
+    });
+
+    const InputMolecule = {
+      init() {
+        elements.prompt.addEventListener('input', () => this.updateCharCount());
+
+        elements.inputImage.addEventListener('change', () => {
+          const file = elements.inputImage.files[0];
+          if (!file) { this.clearImage(); return; }
+          if (!file.type.startsWith('image/')) { Atoms.showError('请选择图片'); this.clearImage(); return; }
+          if (file.size > 10*1024*1024) { Atoms.showError('图片不能超过10MB'); this.clearImage(); return; }
+          const reader = new FileReader();
+          reader.onload = e => {
+            elements.preview.src = e.target.result;
+            elements.previewContainer.classList.remove('hidden');
+            state.base64Image = e.target.result;
+            this.updateParams();
+          };
+          reader.readAsDataURL(file);
+        });
+
+        elements.clearImage.addEventListener('click', () => this.clearImage());
+
+        elements.model.addEventListener('change', () => this.updateParams());
+      },
+
+      updateCharCount() {
+        elements.charCount.textContent = elements.prompt.value.length;
+      },
+
+      clearImage() {
+        state.base64Image = null;
+        elements.preview.src = '';
+        elements.previewContainer.classList.add('hidden');
+        elements.inputImage.value = '';
+        this.updateParams();
+      },
+
+      updateParams() {
+        const isVideo = elements.model.value.includes('video');
+        const hasImage = !!state.base64Image;
+
+        elements.nParam.classList.toggle('hidden', isVideo || hasImage);
+        elements.strengthParam.classList.toggle('hidden', !hasImage || isVideo);
+        elements.aspectParam.classList.toggle('hidden', !isVideo);
+        elements.lengthParam.classList.toggle('hidden', !isVideo);
+      },
+
+      getData() {
+        const prompt = elements.prompt.value.trim();
+        const model = elements.model.value;
+        const hasImage = !!state.base64Image;
+        const isVideo = model.includes('video');
+        return { prompt, model, hasImage, isVideo };
+      }
+    };
+
+    const Coordinator = {
+      async generate() {
+        const { prompt, model, hasImage, isVideo } = InputMolecule.getData();
+        
+        if (!prompt) {
+          Atoms.showError('请填写提示词');
+          elements.prompt.focus();
+          return;
+        }
+        
+        if (prompt.length < 2) {
+          Atoms.showError('提示词太短，请至少输入 2 个字符');
+          elements.prompt.focus();
+          return;
+        }
+
+        Atoms.showProgress();
+
+        try {
+          let results;
+          
+          if (!hasImage && !isVideo) {
+            results = await this.generateImages(prompt);
+          } else if (isVideo) {
+            results = await this.generateVideo(prompt, hasImage);
+          } else {
+            results = await this.generateImageVariants(prompt);
+          }
+
+          if (!results || results.length === 0) {
+            throw new Error('无生成结果');
+          }
+
+          results.forEach(item => {
+            const card = isVideo 
+              ? Atoms.createPlaceholderVideoCard(item.url, prompt)
+              : Atoms.createPlaceholderCard(item.url, prompt);
+            card.dataset.isVideo = isVideo;
+            elements.results.prepend(card);
+            
+            if (isVideo) Atoms.loadVideoPreview(card, item.url);
+            else Atoms.loadImagePreview(card, item.url);
+            
+            History.save(item.url, isVideo, prompt);
+          });
+
+          elements.empty.classList.add('hidden');
+          
+        } catch (err) {
+          console.error('生成失败:', err);
+          Atoms.showError(err.message || '生成失败，请检查网络或配额');
+        } finally {
+          Atoms.hideProgress();
+        }
+      },
+
+      async generateImages(prompt) {
+        const n = parseInt(elements.imgN.value) || 4;
+        const requestBody = {
+          model: 'grok-imagine-1.0',
+          prompt: prompt,
+          n: Math.min(Math.max(n, 1), 10)
+        };
+        
+        const data = await Atoms.apiPost('/images/generations', requestBody);
+        
+        if (!data.data || !Array.isArray(data.data)) {
+          throw new Error('API 返回数据格式错误');
+        }
+        
+        return data.data.map(item => ({
+          url: item.url || Atoms.extractUrl(item)
+        })).filter(item => item.url);
+      },
+
+      async generateVideo(prompt, hasImage) {
+        const requestBody = {
+          model: 'grok-imagine-1.0-video',
+          messages: [],
+          n: 1
+        };
+
+        if (hasImage) {
+          requestBody.messages.push({
+            role: "user",
+            content: [
+              { type: "text", text: prompt },
+              { type: "image_url", image_url: { url: state.base64Image } }
+            ]
+          });
+        } else {
+          requestBody.messages.push({ role: "user", content: prompt });
+        }
+
+        requestBody.video_config = {
+          aspect_ratio: elements.aspect.value || "16:9",
+          video_length: parseInt(elements.length.value) || 10
+        };
+
+        const data = await Atoms.apiPost('/chat/completions', requestBody);
+        
+        if (!data.choices || !Array.isArray(data.choices)) {
+          throw new Error('API 返回数据格式错误');
+        }
+        
+        return data.choices.map(item => {
+          const content = item.message?.content || '';
+          const url = Atoms.extractUrl(content) || content;
+          return { url };
+        }).filter(item => item.url);
+      },
+
+      async generateImageVariants(prompt) {
+        const requestBody = {
+          model: 'grok-imagine-1.0',
+          messages: [{
+            role: "user",
+            content: [
+              { type: "text", text: prompt },
+              { type: "image_url", image_url: { url: state.base64Image } }
+            ]
+          }],
+          n: 1,
+          strength: parseFloat(elements.strength.value) || 0.75
+        };
+
+        const data = await Atoms.apiPost('/chat/completions', requestBody);
+        
+        if (!data.choices || !Array.isArray(data.choices)) {
+          throw new Error('API 返回数据格式错误');
+        }
+        
+        return data.choices.map(item => {
+          const content = item.message?.content;
+          const url = Atoms.extractUrl(content) || content;
+          return { url };
+        }).filter(item => item.url);
+      }
+    };
+
+    function showConfigModal() {
+      elements.configBase.value = config.base;
+      elements.configKey.value = config.key;
+      elements.configHistoryKey.value = config.historyKey;
+      elements.configModal.classList.remove('hidden');
+    }
+
+    function hideConfigModal() {
+      elements.configModal.classList.add('hidden');
+    }
+
+    elements.openConfig.addEventListener('click', showConfigModal);
+
+    elements.saveConfig.addEventListener('click', () => {
+      const newConfig = {
+        base: elements.configBase.value.trim(),
+        key: elements.configKey.value.trim(),
+        historyKey: elements.configHistoryKey.value.trim() || 'grok_imagine_history'
+      };
+
+      if (!newConfig.base || !newConfig.key) {
+        Atoms.showError('请填写完整的 Base URL 和 API Key');
+        return;
+      }
+
+      config = newConfig;
+      HISTORY_KEY = config.historyKey;
+      Config.save(config);
+      hideConfigModal();
+      Atoms.showError('配置已保存');
+    });
+
+    elements.closeConfig.addEventListener('click', hideConfigModal);
+    elements.configModal.addEventListener('click', (e) => {
+      if (e.target === elements.configModal) hideConfigModal();
+    });
+
+    const hideAddressBar = () => {
+      setTimeout(() => window.scrollTo(0, 1), 0);
+    };
+
+    window.addEventListener('beforeunload', () => {
+      BlobManager.revokeAll();
+    });
+
+    document.addEventListener('DOMContentLoaded', () => {
+      if (!Config.isValid(config)) {
+        showConfigModal();
+      }
+
+      hideAddressBar();
+      setTimeout(hideAddressBar, 500);
+      setTimeout(hideAddressBar, 1000);
+
+      window.addEventListener('orientationchange', hideAddressBar);
+      document.addEventListener('touchmove', hideAddressBar, { passive: true });
+      window.addEventListener('scroll', hideAddressBar);
+
+      History.load();
+      InputMolecule.init();
+      InputMolecule.updateCharCount();
+      InputMolecule.updateParams();
+      
+      elements.generateBtn.addEventListener('click', () => Coordinator.generate());
+      
+      elements.clearHistory.addEventListener('click', () => {
+        if (confirm('确定要清除所有历史记录吗？此操作不可恢复。')) {
+          History.clear();
+        }
+      });
+      
+      document.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+          if (!elements.generateBtn.disabled) {
+            Coordinator.generate();
+          }
+        }
+      });
+    });
+  </script>
+</body>
+</html>
