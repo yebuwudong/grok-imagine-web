@@ -9,7 +9,6 @@
 
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
-  <!-- 引入 Dexie.js -->
   <script src="https://unpkg.com/dexie@4.0.1/dist/dexie.min.js"></script>
 
   <script>
@@ -102,10 +101,15 @@
     .select-checkbox { opacity: 0; pointer-events: none; transition: opacity 0.3s; }
     .multi-select-mode .select-checkbox { opacity: 1; pointer-events: auto; }
 
-    #results { columns: 1; column-gap: 1rem; padding: 1rem 0.5rem; }
+    #results { 
+      columns: 1; 
+      column-gap: 1.5rem; 
+      padding: 1rem 0.5rem; 
+    }
     @media (min-width: 640px) { #results { columns: 2; } }
     @media (min-width: 1024px) { #results { columns: 3; } }
-    @media (min-width: 1536px) { #results { columns: 4; } }
+    @media (min-width: 1440px) { #results { columns: 4; } }
+    @media (min-width: 1920px) { #results { columns: 5; } }
 
     #selectionBar {
       position: fixed;
@@ -175,7 +179,6 @@
       object-fit: cover;
     }
 
-    /* 确保视频卡片中的视频正确显示 */
     .video-container video {
       width: 100%;
       height: 100%;
@@ -185,9 +188,6 @@
   </style>
 </head>
 <body class="text-gray-100 flex flex-col">
-
-  <!-- 配置弹窗、顶部按钮、清除历史按钮等保持不变，此处省略以节省篇幅，实际保留所有 DOM 元素 -->
-  <!-- 但为了完整，下面列出所有必要的 DOM 结构，与之前版本完全一致（除了引入 Dexie） -->
 
   <div id="configModal" class="config-modal hidden">
     <div class="glass rounded-3xl p-8 max-w-md w-full mx-4 shadow-2xl">
@@ -355,23 +355,25 @@
     'use strict';
 
     const MAX_PROMPT_LENGTH = 1000;
-    const MAX_STORAGE_SIZE = 20 * 1024 * 1024; // 保留用于localStorage迁移，之后不再使用
 
-    // ----- Dexie 数据库初始化 -----
+    // Dexie 数据库
     const db = new Dexie('GrokImagineDB');
     db.version(1).stores({
       history: '++id, url, isVideo, prompt, timestamp'
     });
 
-    // ----- 配置模块 (不变) -----
+    // IntersectionObserver 用于视频懒播放
+    let videoObserver;
+
+    // 配置模块
     const Config = {
       storageKey: 'grok_imagine_config',
       defaults: {
         base: '',
         key: '',
-        historyKey: 'grok_imagine_history' // 仍保留，用于迁移时识别localStorage key
+        historyKey: 'grok_imagine_history'
       },
-      load() { /* 与之前完全相同，省略以节省篇幅，但实际需要保留 */ 
+      load() {
         const params = new URLSearchParams(location.search);
         const fromUrl = {
           base: params.get('base') || '',
@@ -405,9 +407,9 @@
     };
 
     let config = Config.load();
-    let HISTORY_KEY = config.historyKey; // 保留，用于迁移
+    let HISTORY_KEY = config.historyKey;
 
-    // ----- 元素引用 (不变) -----
+    // 元素引用
     const elements = {
       model: document.getElementById('model'),
       prompt: document.getElementById('prompt'),
@@ -457,8 +459,7 @@
       revokeAll() { state.blobUrls.forEach(url => URL.revokeObjectURL(url)); state.blobUrls.clear(); }
     };
 
-    // ----- 多选辅助函数 (不变) -----
-    function enableMultiSelectMode() { /* 保持不变，省略 */ 
+    function enableMultiSelectMode() {
       if (multiSelectMode) return;
       multiSelectMode = true;
       document.body.classList.add('multi-select-mode');
@@ -494,9 +495,8 @@
       }
     }
 
-    // ----- 历史记录模块 (IndexedDB 版本) -----
+    // 历史记录模块
     const History = {
-      // 从 localStorage 迁移旧数据到 IndexedDB (仅执行一次)
       async migrateFromLocalStorage() {
         try {
           const oldItems = localStorage.getItem(HISTORY_KEY);
@@ -506,7 +506,6 @@
 
           for (const item of items) {
             if (!item || !item.url) continue;
-            // 检查是否已存在（可选，避免重复）
             const existing = await db.history.where('url').equals(item.url).first();
             if (existing) continue;
             await db.history.add({
@@ -516,15 +515,13 @@
               timestamp: item.timestamp || Date.now()
             });
           }
-          // 迁移完成后清除 localStorage
           localStorage.removeItem(HISTORY_KEY);
-          console.log('历史记录已从 localStorage 迁移到 IndexedDB');
+          console.log('历史记录已迁移到 IndexedDB');
         } catch (e) {
-          console.error('迁移历史记录失败', e);
+          console.error('迁移失败', e);
         }
       },
 
-      // 加载历史记录并渲染卡片
       async load() {
         try {
           const items = await db.history.orderBy('timestamp').reverse().toArray();
@@ -540,17 +537,14 @@
           });
           if (items.length > 0) elements.empty.classList.add('hidden');
         } catch (e) {
-          console.error('加载历史记录失败', e);
+          console.error('加载历史失败', e);
         }
       },
 
-      // 保存一条新记录
       async save(url, isVideo, prompt) {
         try {
-          // 去重：如果已存在相同 url 的记录，不重复添加
           const existing = await db.history.where('url').equals(url).first();
           if (existing) return;
-
           await db.history.add({
             url,
             isVideo,
@@ -558,11 +552,10 @@
             timestamp: Date.now()
           });
         } catch (e) {
-          console.error('保存历史记录失败', e);
+          console.error('保存历史失败', e);
         }
       },
 
-      // 清空所有历史记录
       async clear() {
         await db.history.clear();
         elements.results.innerHTML = '';
@@ -573,9 +566,9 @@
       }
     };
 
-    // ----- Atoms 原子函数 (大部分不变，但需要补充完整) -----
+    // 原子层
     const Atoms = {
-      extractUrl(content) { /* 与之前相同，省略以节省篇幅，但实际需要保留 */
+      extractUrl(content) {
         if (!content) return null;
         if (typeof content !== 'string') return null;
         content = content.replace(/```[\s\S]*?```/g, '').trim();
@@ -723,7 +716,7 @@
         return card;
       },
 
-      async loadImagePreview(card, url) { /* 保持不变，省略 */ 
+      async loadImagePreview(card, url) {
         const placeholder = card.querySelector('.image-placeholder');
         if (!placeholder) return;
         let retryCount = 0;
@@ -732,7 +725,7 @@
           img.src = url;
           img.className = 'w-full h-auto object-cover block';
           img.alt = card.dataset.prompt || '生成的图像';
-          img.loading = 'lazy';
+          // 移除 lazy loading，立即加载
           img.onload = () => {
             placeholder.innerHTML = '';
             placeholder.appendChild(img);
@@ -757,7 +750,7 @@
         tryDirectLoad();
       },
 
-      async loadVideoPreview(card, url) { /* 保持不变，省略 */
+      async loadVideoPreview(card, url) {
         const placeholder = card.querySelector('.video-container');
         if (!placeholder) return;
         placeholder.innerHTML = '';
@@ -766,16 +759,15 @@
         video.muted = true;
         video.playsInline = true;
         video.loop = true;
-        video.autoplay = true;
+        // 不设置 autoplay，由 observer 控制
         video.preload = 'metadata';
         video.className = 'w-full h-full object-cover';
+
         const source = document.createElement('source');
         source.src = url;
         source.type = 'video/mp4';
         video.appendChild(source);
-        video.onloadedmetadata = () => {
-          video.play().catch(e => console.log('自动播放失败', e));
-        };
+
         video.onerror = (e) => {
           console.error('视频加载错误', e);
           placeholder.innerHTML = `
@@ -785,11 +777,15 @@
             </div>
           `;
         };
+
         const timeout = setTimeout(() => {
           if (video.readyState < 2) video.onerror();
         }, 15000);
         video.addEventListener('loadeddata', () => clearTimeout(timeout));
+
         placeholder.appendChild(video);
+        // 加入 IntersectionObserver
+        videoObserver.observe(video);
       },
 
       showProgress() {
@@ -807,7 +803,7 @@
         setTimeout(() => elements.error.classList.add('hidden'), 5000);
       },
 
-      async apiPost(endpoint, body) { /* 保持不变，省略 */
+      async apiPost(endpoint, body) {
         if (!Config.isValid(config)) throw new Error('API 配置未完成');
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 120000);
@@ -835,7 +831,7 @@
         }
       },
 
-      async apiPostForm(endpoint, formData) { /* 保持不变，省略 */
+      async apiPostForm(endpoint, formData) {
         if (!Config.isValid(config)) throw new Error('请先配置 API Base URL 和 Key');
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 120000);
@@ -860,7 +856,7 @@
       }
     };
 
-    async function downloadFile(url) { /* 保持不变，省略 */ 
+    async function downloadFile(url) {
       try {
         const filename = url.split('/').pop().split('?')[0] || 'grok_file';
         const response = await fetch(url);
@@ -879,7 +875,6 @@
       }
     }
 
-    // 多选按钮事件
     elements.downloadSelected.addEventListener('click', async () => {
       const cards = Array.from(selectedCards);
       for (let i = 0; i < cards.length; i++) {
@@ -903,7 +898,6 @@
       updateSelectionBar();
     });
 
-    // InputMolecule 保持不变，省略重复代码，但实际需要完整
     const InputMolecule = {
       init() {
         elements.prompt.addEventListener('input', () => this.updateCharCount());
@@ -969,7 +963,6 @@
       }
     };
 
-    // Coordinator 保持不变，但需要确保 History.save 是异步调用（不等待）
     const Coordinator = {
       async generate() {
         const prompt = elements.prompt.value.trim();
@@ -994,8 +987,7 @@
             elements.results.prepend(card);
             if (isVideo) Atoms.loadVideoPreview(card, item.url);
             else Atoms.loadImagePreview(card, item.url);
-            // 保存历史记录（异步，不等待）
-            History.save(item.url, isVideo, prompt).catch(e => console.error('保存历史记录失败', e));
+            History.save(item.url, isVideo, prompt).catch(e => console.error('保存历史失败', e));
           });
           elements.empty.classList.add('hidden');
         } catch (err) {
@@ -1071,7 +1063,6 @@
       }
     };
 
-    // 配置弹窗处理
     function showConfigModal() {
       elements.configBase.value = config.base;
       elements.configKey.value = config.key;
@@ -1100,11 +1091,21 @@
 
     window.addEventListener('beforeunload', () => { BlobManager.revokeAll(); });
 
-    // 启动
     document.addEventListener('DOMContentLoaded', async () => {
+      // 初始化视频懒播放 Observer
+      videoObserver = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          const video = entry.target;
+          if (entry.isIntersecting) {
+            video.play().catch(() => {});
+          } else {
+            video.pause();
+          }
+        });
+      }, { threshold: 0.5 });
+
       if (!Config.isValid(config)) showConfigModal();
 
-      // 初始化数据库并迁移旧数据，然后加载历史记录
       await History.migrateFromLocalStorage();
       await History.load();
 
