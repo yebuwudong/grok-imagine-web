@@ -4,12 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#0A0E1A">
-
-  <title>Grok Imagine</title>
+  <title>Grok Imagine - 最终整合版</title>
 
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
   <script src="https://unpkg.com/dexie@4.0.1/dist/dexie.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
   <script>
     tailwind.config = {
@@ -101,10 +101,10 @@
     .select-checkbox { opacity: 0; pointer-events: none; transition: opacity 0.3s; }
     .multi-select-mode .select-checkbox { opacity: 1; pointer-events: auto; }
 
-    #results { 
-      columns: 1; 
-      column-gap: 1.5rem; 
-      padding: 1rem 0.5rem; 
+    #results {
+      columns: 1;
+      column-gap: 1.5rem;
+      padding: 1rem 0.5rem;
     }
     @media (min-width: 640px) { #results { columns: 2; } }
     @media (min-width: 1024px) { #results { columns: 3; } }
@@ -145,6 +145,7 @@
       gap: 1rem;
       transition: transform 0.3s ease;
       transform: translateY(100%);
+      flex-wrap: wrap;
     }
     #generationProgress.show { transform: translateY(0); }
 
@@ -187,43 +188,57 @@
     }
   </style>
 </head>
+
 <body class="text-gray-100 flex flex-col">
 
+  <!-- 配置弹窗 -->
   <div id="configModal" class="config-modal hidden">
     <div class="glass rounded-3xl p-8 max-w-md w-full mx-4 shadow-2xl">
       <h2 class="text-2xl font-bold mb-6 text-center"><i class="fas fa-cog mr-2 text-primary"></i> API 配置</h2>
+
       <div class="mb-5">
         <label class="block text-sm font-medium mb-2">API Base URL <span class="text-red-400">*</span></label>
-        <input id="configBase" type="url" placeholder="https://example.com/v1" class="w-full px-4 py-3 bg-panel rounded-2xl border border-gray-700 focus:border-primary focus:outline-none">
+        <input id="configBase" type="url" placeholder="http://localhost:8000"
+               class="w-full px-4 py-3 bg-panel rounded-2xl border border-gray-700 focus:border-primary focus:outline-none">
+        <p class="text-xs text-gray-400 mt-2">建议填服务根地址（无需手动加 /v1）</p>
       </div>
+
       <div class="mb-5">
-        <label class="block text-sm font-medium mb-2">API Key <span class="text-red-400">*</span></label>
-        <input id="configKey" type="password" placeholder="sk-..." class="w-full px-4 py-3 bg-panel rounded-2xl border border-gray-700 focus:border-primary focus:outline-none">
+        <label class="block text-sm font-medium mb-2">API Key（可选）</label>
+        <input id="configKey" type="password" placeholder="Bearer token（可留空）"
+               class="w-full px-4 py-3 bg-panel rounded-2xl border border-gray-700 focus:border-primary focus:outline-none">
       </div>
+
       <div class="mb-6">
-        <label class="block text-sm font-medium mb-2">历史记录 Key（可选，默认：grok_imagine_history）</label>
-        <input id="configHistoryKey" type="text" placeholder="grok_imagine_history" class="w-full px-4 py-3 bg-panel rounded-2xl border border-gray-700 focus:border-primary focus:outline-none">
+        <label class="block text-sm font-medium mb-2">历史记录 Key（可选）</label>
+        <input id="configHistoryKey" type="text" placeholder="grok_imagine_history"
+               class="w-full px-4 py-3 bg-panel rounded-2xl border border-gray-700 focus:border-primary focus:outline-none">
       </div>
+
       <div class="flex gap-3">
         <button id="saveConfig" class="flex-1 py-3 btn-gradient rounded-2xl font-bold shadow-lg">保存并继续</button>
         <button id="closeConfig" class="flex-1 py-3 bg-gray-700 rounded-2xl font-bold">取消</button>
       </div>
-      <p class="text-xs text-gray-400 text-center mt-4">配置仅保存在你的浏览器本地，不会上传到任何服务器</p>
+
+      <p class="text-xs text-gray-400 text-center mt-4">配置仅保存在你的浏览器本地</p>
     </div>
   </div>
 
-  <div class="fixed top-0.75rem left-0.75rem z-50">
+  <!-- 左上角配置按钮 -->
+  <div class="fixed top-3 left-3 z-50">
     <button id="openConfig" class="px-5 py-3 bg-panel/80 hover:bg-panel rounded-xl text-base font-medium shadow-lg">
       <i class="fas fa-cog text-xl"></i>
     </button>
   </div>
 
+  <!-- 右上角清空历史 -->
   <div id="clearHistoryWrapper">
     <button id="clearHistory" class="px-5 py-3 bg-red-600/80 hover:bg-red-700 rounded-xl text-base font-medium shadow-lg">
       <i class="fas fa-trash mr-2"></i> 清除历史
     </button>
   </div>
 
+  <!-- 主体 -->
   <div class="main-container">
     <div class="input-panel">
       <div class="glass rounded-3xl p-6 flex flex-col shadow-2xl">
@@ -232,19 +247,20 @@
             <i class="fas fa-robot mr-2 text-primary"></i> 模型
           </label>
           <select id="model" class="w-full px-4 py-3 bg-panel rounded-2xl border border-gray-700 focus:border-primary focus:outline-none text-base">
-            <option value="grok-imagine-1.0">grok-imagine-1.0（图像生成）</option>
+            <option value="grok-imagine-1.0" selected>grok-imagine-1.0（图像生成）</option>
             <option value="grok-imagine-1.0-edit">grok-imagine-1.0-edit（图像编辑）</option>
             <option value="grok-imagine-1.0-video">grok-imagine-1.0-video（视频生成）</option>
           </select>
+          <p class="text-xs text-gray-400 mt-2">默认无限流式生成（3并发，每批2张），点击“停止”结束。</p>
         </div>
 
         <div class="mb-5">
           <label class="flex items-center text-base font-medium mb-2">
             <i class="fas fa-pen-nib mr-2 text-primary"></i> 提示词
           </label>
-          <textarea id="prompt" rows="6" placeholder="输入详细描述，越具体效果越好...（最多1000字符）" maxlength="1000"
+          <textarea id="prompt" rows="6" placeholder="输入详细描述..." maxlength="1000"
                     class="w-full px-4 py-3 bg-panel rounded-2xl border border-gray-700 focus:border-primary resize-none text-base"></textarea>
-          <div class="text-right text-xs text-gray-400 mt-2">已用 <span id="charCount">0</span> / 最多 1000 字符</div>
+          <div class="text-right text-xs text-gray-400 mt-2">已用 <span id="charCount">0</span> / 1000</div>
         </div>
 
         <div class="flex flex-col lg:flex-row gap-6 mb-5">
@@ -252,7 +268,8 @@
             <label id="referenceLabel" class="flex items-center text-base font-medium mb-2">
               <i class="fas fa-image mr-2 text-primary"></i> 参考图像（可选）
             </label>
-            <input type="file" id="inputImage" accept="image/*" multiple class="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-xl file:bg-primary file:text-black file:font-bold file:border-0">
+            <input type="file" id="inputImage" accept="image/*" multiple
+                   class="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-xl file:bg-primary file:text-black file:font-bold file:border-0">
             <div id="previewContainer" class="mt-4 relative" style="display:none;">
               <div class="bg-panel/70 rounded-3xl p-4 shadow-2xl overflow-hidden">
                 <div id="previewGrid"></div>
@@ -264,58 +281,107 @@
             </div>
           </div>
 
-          <div class="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div id="nParam">
-              <label class="block text-sm mb-1 text-gray-400">生成数量</label>
-              <select id="img-n" class="w-full px-3 py-2 bg-panel rounded-xl border border-gray-700 text-sm">
-                <option value="1">1 张</option>
-                <option value="2">2 张</option>
-                <option value="3">3 张</option>
-                <option value="4" selected>4 张</option>
-                <option value="6">6 张</option>
-                <option value="8">8 张</option>
-                <option value="10">10 张</option>
-              </select>
+          <div class="flex-1 min-w-0">
+            <!-- 图片参数（中文标签） -->
+            <div id="imageParams" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div class="sm:col-span-2">
+                <label class="block text-sm mb-1 text-gray-400">图片尺寸</label>
+                <select id="imageSize" class="w-full px-3 py-2 bg-panel rounded-xl border border-gray-700 text-sm">
+                  <option value="1024x1024">1024x1024</option>
+                  <option value="1024x1792" selected>1024x1792</option>
+                  <option value="1792x1024">1792x1024</option>
+                  <option value="720x1280">720x1280</option>
+                  <option value="1280x720">1280x720</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm mb-1 text-gray-400">响应格式</label>
+                <select id="responseFormat" class="w-full px-3 py-2 bg-panel rounded-xl border border-gray-700 text-sm">
+                  <option value="url">url</option>
+                  <option value="b64_json" selected>base64</option>
+                </select>
+              </div>
+              <!-- 变化强度（上传参考图且非编辑模式时显示） -->
+              <div id="strengthParam" class="hidden">
+                <label class="block text-sm mb-1 text-gray-400">变化强度</label>
+                <select id="strength" class="w-full px-3 py-2 bg-panel rounded-xl border border-gray-700 text-sm">
+                  <option value="0.3">低 (0.3)</option>
+                  <option value="0.5">中 (0.5)</option>
+                  <option value="0.75" selected>高 (0.75)</option>
+                  <option value="0.9">很高 (0.9)</option>
+                </select>
+              </div>
             </div>
 
-            <div id="strengthParam" class="hidden">
-              <label class="block text-sm mb-1 text-gray-400">变化强度</label>
-              <select id="strength" class="w-full px-3 py-2 bg-panel rounded-xl border border-gray-700 text-sm">
-                <option value="0.3">低 (0.3)</option>
-                <option value="0.5">中 (0.5)</option>
-                <option value="0.75" selected>高 (0.75)</option>
-                <option value="0.9">很高 (0.9)</option>
-              </select>
-            </div>
-
-            <div id="aspectParam" class="sm:col-span-2">
-              <label class="block text-sm mb-1 text-gray-400">宽高比</label>
-              <select id="aspect" class="w-full px-3 py-2 bg-panel rounded-xl border border-gray-700 text-sm">
-                <option value="1:1">1:1 (方形)</option>
-                <option value="16:9">16:9 (横版)</option>
-                <option value="9:16" selected>9:16 (竖版)</option>
-                <option value="3:2">3:2 (横版经典)</option>
-                <option value="2:3">2:3 (竖版经典)</option>
-              </select>
-            </div>
-
-            <div id="lengthParam" class="hidden sm:col-span-2">
-              <label class="block text-sm mb-1 text-gray-400">视频时长</label>
-              <select id="length" class="w-full px-3 py-2 bg-panel rounded-xl border border-gray-700 text-sm">
-                <option value="6" selected>6 秒</option>
-                <option value="10">10 秒</option>
-                <option value="15">15 秒</option>
-              </select>
+            <!-- 视频参数（中文标签） -->
+            <div id="videoParams" class="grid grid-cols-1 sm:grid-cols-2 gap-4 hidden">
+              <div class="sm:col-span-2">
+                <label class="block text-sm mb-1 text-gray-400">宽高比</label>
+                <select id="videoAspect" class="w-full px-3 py-2 bg-panel rounded-xl border border-gray-700 text-sm">
+                  <option value="9:16" selected>9:16</option>
+                  <option value="16:9">16:9</option>
+                  <option value="1:1">1:1</option>
+                  <option value="2:3">2:3</option>
+                  <option value="3:2">3:2</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm mb-1 text-gray-400">视频长度(秒)</label>
+                <select id="videoLength" class="w-full px-3 py-2 bg-panel rounded-xl border border-gray-700 text-sm">
+                  <option value="6" selected>6</option>
+                  <option value="10">10</option>
+                  <option value="15">15</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm mb-1 text-gray-400">分辨率</label>
+                <select id="videoResolution" class="w-full px-3 py-2 bg-panel rounded-xl border border-gray-700 text-sm">
+                  <option value="720p" selected>720p</option>
+                  <option value="480p">480p</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm mb-1 text-gray-400">预设风格</label>
+                <select id="videoPreset" class="w-full px-3 py-2 bg-panel rounded-xl border border-gray-700 text-sm">
+                  <option value="normal" selected>normal</option>
+                  <option value="fun">fun</option>
+                  <option value="spicy">spicy</option>
+                  <option value="custom">custom</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm mb-1 text-gray-400">推理强度</label>
+                <select id="reasoningEffort" class="w-full px-3 py-2 bg-panel rounded-xl border border-gray-700 text-sm">
+                  <option value="none" selected>none</option>
+                  <option value="minimal">minimal</option>
+                  <option value="low">low</option>
+                  <option value="medium">medium</option>
+                  <option value="high">high</option>
+                  <option value="xhigh">xhigh</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm mb-1 text-gray-400">温度</label>
+                <input id="temperature" type="number" step="0.1" min="0" max="2" value="0.7"
+                       class="w-full px-3 py-2 bg-panel rounded-xl border border-gray-700 text-sm">
+              </div>
+              <div>
+                <label class="block text-sm mb-1 text-gray-400">top_p</label>
+                <input id="topP" type="number" step="0.05" min="0" max="1" value="0.95"
+                       class="w-full px-3 py-2 bg-panel rounded-xl border border-gray-700 text-sm">
+              </div>
             </div>
           </div>
         </div>
 
-        <button id="generateBtn" class="w-full py-5 text-xl font-bold btn-gradient rounded-2xl shadow-2xl hover:scale-105 transition disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100">
+        <button id="generateBtn"
+                class="w-full py-5 text-xl font-bold btn-gradient rounded-2xl shadow-2xl hover:scale-105 transition disabled:opacity-50">
           <i class="fas fa-magic mr-2"></i> 生成
         </button>
       </div>
     </div>
 
+    <!-- 结果区 -->
     <div class="results-section">
       <div id="selectionBar" class="hidden">
         <div class="flex items-center justify-between px-4">
@@ -334,17 +400,24 @@
         <div id="results"></div>
         <div id="empty" class="text-center py-20 text-gray-500 flex-1 flex flex-col items-center justify-center">
           <i class="fas fa-sparkles text-6xl mb-4 opacity-20"></i>
-          <p class="text-lg">结果将显示在这里（刷新页面也不会丢失）</p>
+          <p class="text-lg">结果将显示在这里</p>
         </div>
       </div>
     </div>
   </div>
 
+  <!-- 底部进度条（移除了活跃并发数显示） -->
   <div id="generationProgress">
     <i class="fas fa-spinner spinner text-3xl text-primary"></i>
-    <p class="text-lg font-medium">生成中，请稍候...</p>
+    <p id="generationProgressText" class="text-lg font-medium">生成中...</p>
+    <span id="generationCounter" class="text-sm bg-panel px-3 py-1 rounded-full">已生成 0 个</span>
+    <span id="generationTimer" class="text-sm bg-panel px-3 py-1 rounded-full">总耗时 0s</span>
+    <button id="stopGenerate" class="px-4 py-2 bg-red-600/80 hover:bg-red-700 rounded-xl text-sm font-medium">
+      <i class="fas fa-stop mr-1"></i> 停止
+    </button>
   </div>
 
+  <!-- 错误提示 -->
   <div id="error" class="fixed bottom-20 left-1/2 -translate-x-1/2 hidden z-50 max-w-[90vw]">
     <div class="bg-red-900/90 rounded-2xl px-6 py-4 text-base shadow-2xl">
       <i class="fas fa-exclamation-triangle mr-2"></i> <span id="errorText"></span>
@@ -352,781 +425,1368 @@
   </div>
 
   <script>
-    'use strict';
+  'use strict';
 
-    const MAX_PROMPT_LENGTH = 1000;
+  const MAX_PROMPT_LENGTH = 1000;
+  const FIXED_IMAGE_N = 2;        // 每批2张
+  const MAX_CONCURRENCY = 3;       // 3并发
 
-    // Dexie 数据库
-    const db = new Dexie('GrokImagineDB');
-    db.version(1).stores({
-      history: '++id, url, isVideo, prompt, timestamp'
-    });
+  // Dexie 数据库
+  const db = new Dexie('GrokImagineDB');
+  db.version(1).stores({
+    history: '++id, url, isVideo, prompt, timestamp'
+  });
 
-    // IntersectionObserver 用于视频懒播放
-    let videoObserver;
+  let videoObserver;
 
-    // 配置模块
-    const Config = {
-      storageKey: 'grok_imagine_config',
-      defaults: {
-        base: '',
-        key: '',
-        historyKey: 'grok_imagine_history'
-      },
-      load() {
-        const params = new URLSearchParams(location.search);
-        const fromUrl = {
-          base: params.get('base') || '',
-          key: params.get('key') || '',
-          historyKey: params.get('historyKey') || this.defaults.historyKey
-        };
-        if (fromUrl.base && fromUrl.key) {
-          this.save(fromUrl);
-          return fromUrl;
-        }
-        try {
-          const saved = localStorage.getItem(this.storageKey);
-          if (saved) {
-            return { ...this.defaults, ...JSON.parse(saved) };
-          }
-        } catch (e) {
-          console.error('加载配置失败', e);
-        }
-        return { ...this.defaults };
-      },
-      save(config) {
-        try {
-          localStorage.setItem(this.storageKey, JSON.stringify(config));
-        } catch (e) {
-          console.error('保存配置失败', e);
-        }
-      },
-      isValid(config) {
-        return config.base && config.key && config.base.trim() && config.key.trim();
+  // 配置模块
+  const Config = {
+    storageKey: 'grok_imagine_config',
+    defaults: { base: '', key: '', historyKey: 'grok_imagine_history' },
+    load() {
+      const params = new URLSearchParams(location.search);
+      const fromUrl = {
+        base: params.get('base') || '',
+        key: params.get('key') || '',
+        historyKey: params.get('historyKey') || this.defaults.historyKey
+      };
+      if (fromUrl.base) {
+        this.save(fromUrl);
+        return fromUrl;
       }
-    };
-
-    let config = Config.load();
-    let HISTORY_KEY = config.historyKey;
-
-    // 元素引用
-    const elements = {
-      model: document.getElementById('model'),
-      prompt: document.getElementById('prompt'),
-      charCount: document.getElementById('charCount'),
-      inputImage: document.getElementById('inputImage'),
-      previewContainer: document.getElementById('previewContainer'),
-      previewGrid: document.getElementById('previewGrid'),
-      imageCount: document.getElementById('imageCount'),
-      clearImage: document.getElementById('clearImage'),
-      referenceLabel: document.getElementById('referenceLabel'),
-      imgN: document.getElementById('img-n'),
-      strength: document.getElementById('strength'),
-      aspect: document.getElementById('aspect'),
-      length: document.getElementById('length'),
-      nParam: document.getElementById('nParam'),
-      strengthParam: document.getElementById('strengthParam'),
-      aspectParam: document.getElementById('aspectParam'),
-      lengthParam: document.getElementById('lengthParam'),
-      generateBtn: document.getElementById('generateBtn'),
-      results: document.getElementById('results'),
-      empty: document.getElementById('empty'),
-      generationProgress: document.getElementById('generationProgress'),
-      error: document.getElementById('error'),
-      errorText: document.getElementById('errorText'),
-      clearHistory: document.getElementById('clearHistory'),
-      selectionBar: document.getElementById('selectionBar'),
-      selectedCount: document.getElementById('selectedCount'),
-      downloadSelected: document.getElementById('downloadSelected'),
-      cancelSelection: document.getElementById('cancelSelection'),
-      selectAll: document.getElementById('selectAll'),
-      configModal: document.getElementById('configModal'),
-      configBase: document.getElementById('configBase'),
-      configKey: document.getElementById('configKey'),
-      configHistoryKey: document.getElementById('configHistoryKey'),
-      saveConfig: document.getElementById('saveConfig'),
-      closeConfig: document.getElementById('closeConfig'),
-      openConfig: document.getElementById('openConfig')
-    };
-
-    const state = { images: [], blobUrls: new Set() };
-    let selectedCards = new Set();
-    let multiSelectMode = false;
-
-    const BlobManager = {
-      add(url) { state.blobUrls.add(url); },
-      revoke(url) { if (state.blobUrls.has(url)) { URL.revokeObjectURL(url); state.blobUrls.delete(url); } },
-      revokeAll() { state.blobUrls.forEach(url => URL.revokeObjectURL(url)); state.blobUrls.clear(); }
-    };
-
-    function enableMultiSelectMode() {
-      if (multiSelectMode) return;
-      multiSelectMode = true;
-      document.body.classList.add('multi-select-mode');
-      updateSelectionBar();
-    }
-    function disableMultiSelectMode() {
-      multiSelectMode = false;
-      document.body.classList.remove('multi-select-mode');
-      selectedCards.clear();
-      updateSelectionBar();
-    }
-    function toggleCardSelection(card) {
-      const checkbox = card.querySelector('.select-checkbox');
-      checkbox.checked = !checkbox.checked;
-      if (checkbox.checked) {
-        selectedCards.add(card);
-      } else {
-        selectedCards.delete(card);
-      }
-      updateSelectionBar();
-      if (selectedCards.size === 0) {
-        disableMultiSelectMode();
-      }
-    }
-    function updateSelectionBar() {
-      if (selectedCards.size > 0) {
-        elements.selectedCount.textContent = selectedCards.size;
-        elements.selectionBar.classList.remove('hidden');
-        elements.selectionBar.classList.add('show');
-      } else {
-        elements.selectionBar.classList.add('hidden');
-        elements.selectionBar.classList.remove('show');
-      }
-    }
-
-    // 历史记录模块
-    const History = {
-      async migrateFromLocalStorage() {
-        try {
-          const oldItems = localStorage.getItem(HISTORY_KEY);
-          if (!oldItems) return;
-          const items = JSON.parse(oldItems);
-          if (!Array.isArray(items)) return;
-
-          for (const item of items) {
-            if (!item || !item.url) continue;
-            const existing = await db.history.where('url').equals(item.url).first();
-            if (existing) continue;
-            await db.history.add({
-              url: item.url,
-              isVideo: item.isVideo || false,
-              prompt: (item.prompt || '').substring(0, 200),
-              timestamp: item.timestamp || Date.now()
-            });
-          }
-          localStorage.removeItem(HISTORY_KEY);
-          console.log('历史记录已迁移到 IndexedDB');
-        } catch (e) {
-          console.error('迁移失败', e);
-        }
-      },
-
-      async load() {
-        try {
-          const items = await db.history.orderBy('timestamp').reverse().toArray();
-          items.forEach(item => {
-            const card = item.isVideo
-              ? Atoms.createPlaceholderVideoCard(item.url, item.prompt)
-              : Atoms.createPlaceholderCard(item.url, item.prompt);
-            card.dataset.isVideo = item.isVideo;
-            card.dataset.prompt = item.prompt || '';
-            elements.results.appendChild(card);
-            if (item.isVideo) Atoms.loadVideoPreview(card, item.url);
-            else Atoms.loadImagePreview(card, item.url);
-          });
-          if (items.length > 0) elements.empty.classList.add('hidden');
-        } catch (e) {
-          console.error('加载历史失败', e);
-        }
-      },
-
-      async save(url, isVideo, prompt) {
-        try {
-          const existing = await db.history.where('url').equals(url).first();
-          if (existing) return;
-          await db.history.add({
-            url,
-            isVideo,
-            prompt: prompt.substring(0, 200),
-            timestamp: Date.now()
-          });
-        } catch (e) {
-          console.error('保存历史失败', e);
-        }
-      },
-
-      async clear() {
-        await db.history.clear();
-        elements.results.innerHTML = '';
-        elements.empty.classList.remove('hidden');
-        BlobManager.revokeAll();
-        selectedCards.clear();
-        disableMultiSelectMode();
-      }
-    };
-
-    // 原子层
-    const Atoms = {
-      extractUrl(content) {
-        if (!content) return null;
-        if (typeof content !== 'string') return null;
-        content = content.replace(/```[\s\S]*?```/g, '').trim();
-        if (content.startsWith('http') || content.startsWith('/')) return content;
-        const markdownMatch = content.match(/!\[([^\]]*)\]\((https?:\/\/[^\)]+)\)/);
-        if (markdownMatch) return markdownMatch[2];
-        const urlMatch = content.match(/(https?:\/\/[^\s<>"{}|\\^`\[\]]+)/);
-        if (urlMatch) return urlMatch[1];
-        return null;
-      },
-
-      createPlaceholderCard(url, prompt) {
-        const card = document.createElement('div');
-        card.className = 'card rounded-2xl glass overflow-hidden relative';
-        card.dataset.url = url;
-        card.dataset.prompt = prompt || '';
-
-        card.innerHTML = `
-          <input type="checkbox" class="select-checkbox absolute top-4 left-4 z-20 w-6 h-6 accent-primary rounded">
-          <div class="image-placeholder bg-panel/50 flex items-center justify-center relative overflow-hidden min-h-64">
-            <i class="fas fa-spinner spinner text-5xl text-primary"></i>
-          </div>
-          <div class="overlay">
-            <div class="text-xs text-gray-300 mb-2 line-clamp-2">${prompt || ''}</div>
-            <a class="single-download block text-center py-3 btn-gradient rounded-xl text-black font-bold text-sm w-full mb-2">
-              <i class="fas fa-download mr-1"></i> 下载图像
-            </a>
-            <button type="button" class="copy-prompt-btn block text-center py-2 bg-panel rounded-xl text-white text-xs w-full hover:bg-panel/80">
-              <i class="fas fa-copy mr-1"></i> 复制提示词
-            </button>
-          </div>
-        `;
-
-        card.addEventListener('touchstart', () => card.classList.add('touched'), { passive: true });
-        card.addEventListener('touchend', () => card.classList.remove('touched'), { passive: true });
-        card.addEventListener('mouseleave', () => card.classList.remove('touched'));
-
-        card.addEventListener('dblclick', (e) => {
-          e.preventDefault();
-          enableMultiSelectMode();
-          toggleCardSelection(card);
-        });
-
-        card.addEventListener('click', (e) => {
-          if (!multiSelectMode) return;
-          const clickedButton = e.target.closest('button') || e.target.closest('a');
-          if (clickedButton) return;
-          e.preventDefault();
-          toggleCardSelection(card);
-        });
-
-        card.querySelector('.single-download').addEventListener('click', async (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          await downloadFile(url);
-        });
-
-        card.querySelector('.copy-prompt-btn').addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          navigator.clipboard.writeText(card.dataset.prompt).then(() => {
-            const btn = e.target.closest('button');
-            const orig = btn.innerHTML;
-            btn.innerHTML = '<i class="fas fa-check mr-1"></i> 已复制';
-            setTimeout(() => btn.innerHTML = orig, 2000);
-          });
-        });
-
-        return card;
-      },
-
-      createPlaceholderVideoCard(url, prompt) {
-        const card = document.createElement('div');
-        card.className = 'card rounded-2xl glass overflow-hidden relative';
-        card.dataset.url = url;
-        card.dataset.prompt = prompt || '';
-
-        card.innerHTML = `
-          <input type="checkbox" class="select-checkbox absolute top-4 left-4 z-20 w-6 h-6 accent-primary rounded">
-          <div class="aspect-video bg-panel/50 flex items-center justify-center relative overflow-hidden video-container">
-            <i class="fas fa-spinner spinner text-5xl text-primary"></i>
-          </div>
-          <div class="overlay">
-            <div class="text-xs text-gray-300 mb-2 line-clamp-2">${prompt || ''}</div>
-            <a class="single-download block text-center py-3 btn-gradient rounded-xl text-black font-bold text-sm w-full mb-2">
-              <i class="fas fa-download mr-1"></i> 下载视频
-            </a>
-            <div class="grid grid-cols-2 gap-2">
-              <button type="button" class="copy-url-btn block text-center py-2 bg-panel rounded-xl text-white text-xs hover:bg-panel/80">
-                <i class="fas fa-link mr-1"></i> 复制链接
-              </button>
-              <button type="button" class="copy-prompt-btn block text-center py-2 bg-panel rounded-xl text-white text-xs hover:bg-panel/80">
-                <i class="fas fa-copy mr-1"></i> 提示词
-              </button>
-            </div>
-          </div>
-        `;
-
-        card.addEventListener('touchstart', () => card.classList.add('touched'), { passive: true });
-        card.addEventListener('touchend', () => card.classList.remove('touched'), { passive: true });
-        card.addEventListener('mouseleave', () => card.classList.remove('touched'));
-
-        card.addEventListener('dblclick', (e) => {
-          e.preventDefault();
-          enableMultiSelectMode();
-          toggleCardSelection(card);
-        });
-
-        card.addEventListener('click', (e) => {
-          if (!multiSelectMode) return;
-          const clickedButton = e.target.closest('button') || e.target.closest('a');
-          if (clickedButton) return;
-          e.preventDefault();
-          toggleCardSelection(card);
-        });
-
-        card.querySelector('.single-download').addEventListener('click', async (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          await downloadFile(url);
-        });
-
-        card.querySelector('.copy-url-btn').addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          navigator.clipboard.writeText(url).then(() => {
-            const btn = e.target.closest('button');
-            const orig = btn.innerHTML;
-            btn.innerHTML = '<i class="fas fa-check mr-1"></i> 已复制';
-            setTimeout(() => btn.innerHTML = orig, 2000);
-          });
-        });
-
-        card.querySelector('.copy-prompt-btn').addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          navigator.clipboard.writeText(card.dataset.prompt).then(() => {
-            const btn = e.target.closest('button');
-            const orig = btn.innerHTML;
-            btn.innerHTML = '<i class="fas fa-check mr-1"></i> 已复制';
-            setTimeout(() => btn.innerHTML = orig, 2000);
-          });
-        });
-
-        return card;
-      },
-
-      async loadImagePreview(card, url) {
-        const placeholder = card.querySelector('.image-placeholder');
-        if (!placeholder) return;
-        let retryCount = 0;
-        const tryDirectLoad = () => {
-          const img = document.createElement('img');
-          img.src = url;
-          img.className = 'w-full h-auto object-cover block';
-          img.alt = card.dataset.prompt || '生成的图像';
-          // 移除 lazy loading，立即加载
-          img.onload = () => {
-            placeholder.innerHTML = '';
-            placeholder.appendChild(img);
-          };
-          img.onerror = () => {
-            if (retryCount < 2) {
-              retryCount++;
-              setTimeout(tryDirectLoad, 1000 * retryCount);
-            } else {
-              placeholder.innerHTML = `
-                <div class="text-center p-4">
-                  <i class="fas fa-exclamation-circle text-3xl text-red-500 mb-2"></i>
-                  <p class="text-gray-400 text-xs">加载失败<br>点击下载查看</p>
-                </div>
-              `;
-            }
-          };
-          setTimeout(() => {
-            if (!img.complete && !img.naturalWidth) img.onerror();
-          }, 15000);
-        };
-        tryDirectLoad();
-      },
-
-      async loadVideoPreview(card, url) {
-        const placeholder = card.querySelector('.video-container');
-        if (!placeholder) return;
-        placeholder.innerHTML = '';
-        const video = document.createElement('video');
-        video.controls = false;
-        video.muted = true;
-        video.playsInline = true;
-        video.loop = true;
-        // 不设置 autoplay，由 observer 控制
-        video.preload = 'metadata';
-        video.className = 'w-full h-full object-cover';
-
-        const source = document.createElement('source');
-        source.src = url;
-        source.type = 'video/mp4';
-        video.appendChild(source);
-
-        video.onerror = (e) => {
-          console.error('视频加载错误', e);
-          placeholder.innerHTML = `
-            <div class="flex flex-col items-center justify-center h-full text-center p-8">
-              <i class="fas fa-play-circle text-6xl text-primary mb-4 opacity-50"></i>
-              <p class="text-gray-400 text-sm">预览不可用<br>请使用“复制链接”或“下载”查看视频</p>
-            </div>
-          `;
-        };
-
-        const timeout = setTimeout(() => {
-          if (video.readyState < 2) video.onerror();
-        }, 15000);
-        video.addEventListener('loadeddata', () => clearTimeout(timeout));
-
-        placeholder.appendChild(video);
-        // 加入 IntersectionObserver
-        videoObserver.observe(video);
-      },
-
-      showProgress() {
-        elements.generationProgress.classList.add('show');
-        elements.generateBtn.disabled = true;
-      },
-      hideProgress() {
-        elements.generationProgress.classList.remove('show');
-        elements.generateBtn.disabled = false;
-      },
-      showError(message) {
-        console.error('错误:', message);
-        elements.errorText.textContent = message;
-        elements.error.classList.remove('hidden');
-        setTimeout(() => elements.error.classList.add('hidden'), 5000);
-      },
-
-      async apiPost(endpoint, body) {
-        if (!Config.isValid(config)) throw new Error('API 配置未完成');
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 120000);
-        try {
-          const headers = {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${config.key}`
-          };
-          const res = await fetch(config.base + endpoint, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify(body),
-            signal: controller.signal
-          });
-          clearTimeout(timeoutId);
-          if (!res.ok) {
-            const errData = await res.json().catch(() => ({}));
-            throw new Error(errData.error?.message || `请求失败: HTTP ${res.status}`);
-          }
-          return await res.json();
-        } catch (e) {
-          clearTimeout(timeoutId);
-          if (e.name === 'AbortError') throw new Error('请求超时，请稍后重试');
-          throw e;
-        }
-      },
-
-      async apiPostForm(endpoint, formData) {
-        if (!Config.isValid(config)) throw new Error('请先配置 API Base URL 和 Key');
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 120000);
-        try {
-          const res = await fetch(config.base + endpoint, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${config.key}` },
-            body: formData,
-            signal: controller.signal
-          });
-          clearTimeout(timeoutId);
-          if (!res.ok) {
-            const errData = await res.json().catch(() => ({}));
-            throw new Error(errData.error?.message || `请求失败: HTTP ${res.status}`);
-          }
-          return await res.json();
-        } catch (e) {
-          clearTimeout(timeoutId);
-          if (e.name === 'AbortError') throw new Error('请求超时，请稍后重试');
-          throw e;
-        }
-      }
-    };
-
-    async function downloadFile(url) {
       try {
-        const filename = url.split('/').pop().split('?')[0] || 'grok_file';
-        const response = await fetch(url);
-        if (!response.ok) throw new Error();
-        const blob = await response.blob();
-        const blobUrl = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = blobUrl;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(blobUrl);
-      } catch (e) {
-        alert('下载失败，请手动长按保存');
+        const saved = localStorage.getItem(this.storageKey);
+        if (saved) return { ...this.defaults, ...JSON.parse(saved) };
+      } catch (e) {}
+      return { ...this.defaults };
+    },
+    save(config) {
+      try {
+        localStorage.setItem(this.storageKey, JSON.stringify(config));
+      } catch (e) {}
+    },
+    isValid(config) {
+      return !!(config.base && config.base.trim());
+    }
+  };
+
+  let config = Config.load();
+  let HISTORY_KEY = config.historyKey;
+
+  // 元素引用
+  const elements = {
+    model: document.getElementById('model'),
+    prompt: document.getElementById('prompt'),
+    charCount: document.getElementById('charCount'),
+    inputImage: document.getElementById('inputImage'),
+    previewContainer: document.getElementById('previewContainer'),
+    previewGrid: document.getElementById('previewGrid'),
+    imageCount: document.getElementById('imageCount'),
+    clearImage: document.getElementById('clearImage'),
+    referenceLabel: document.getElementById('referenceLabel'),
+    imageParams: document.getElementById('imageParams'),
+    imageSize: document.getElementById('imageSize'),
+    responseFormat: document.getElementById('responseFormat'),
+    strengthParam: document.getElementById('strengthParam'),
+    strength: document.getElementById('strength'),
+    videoParams: document.getElementById('videoParams'),
+    videoAspect: document.getElementById('videoAspect'),
+    videoLength: document.getElementById('videoLength'),
+    videoResolution: document.getElementById('videoResolution'),
+    videoPreset: document.getElementById('videoPreset'),
+    reasoningEffort: document.getElementById('reasoningEffort'),
+    temperature: document.getElementById('temperature'),
+    topP: document.getElementById('topP'),
+    generateBtn: document.getElementById('generateBtn'),
+    results: document.getElementById('results'),
+    empty: document.getElementById('empty'),
+    generationProgress: document.getElementById('generationProgress'),
+    generationProgressText: document.getElementById('generationProgressText'),
+    generationCounter: document.getElementById('generationCounter'),
+    generationTimer: document.getElementById('generationTimer'),
+    stopGenerate: document.getElementById('stopGenerate'),
+    error: document.getElementById('error'),
+    errorText: document.getElementById('errorText'),
+    clearHistory: document.getElementById('clearHistory'),
+    selectionBar: document.getElementById('selectionBar'),
+    selectedCount: document.getElementById('selectedCount'),
+    downloadSelected: document.getElementById('downloadSelected'),
+    cancelSelection: document.getElementById('cancelSelection'),
+    selectAll: document.getElementById('selectAll'),
+    configModal: document.getElementById('configModal'),
+    configBase: document.getElementById('configBase'),
+    configKey: document.getElementById('configKey'),
+    configHistoryKey: document.getElementById('configHistoryKey'),
+    saveConfig: document.getElementById('saveConfig'),
+    closeConfig: document.getElementById('closeConfig'),
+    openConfig: document.getElementById('openConfig')
+  };
+
+  const state = { images: [], blobUrls: new Set() };
+  let selectedCards = new Set();
+  let multiSelectMode = false;
+  let generatedCount = 0;
+  let generationStartTime = null;
+  let timerInterval = null;
+
+  // ==================== 文件名处理函数（修复版）====================
+
+  // 从 URL 提取原始文件名
+  function extractFilenameFromUrl(url) {
+    if (!url || typeof url !== 'string') return null;
+    if (url.startsWith('data:')) return null;
+    
+    try {
+      const urlObj = new URL(url);
+      let pathname = urlObj.pathname;
+      // 移除末尾斜杠
+      pathname = pathname.replace(/\/$/, '');
+      // 获取最后一部分
+      let filename = pathname.split('/').pop();
+      
+      if (filename && filename.includes('.')) {
+        // 移除查询参数和哈希
+        filename = filename.split('?')[0].split('#')[0];
+        // URL 解码
+        try {
+          filename = decodeURIComponent(filename);
+        } catch (e) {}
+        // 清理非法字符
+        filename = filename.replace(/[<>:"/\\|?*]/g, '_');
+        // 限制长度
+        if (filename.length > 100) {
+          const ext = filename.split('.').pop();
+          filename = filename.substring(0, 90) + '...' + ext;
+        }
+        return filename;
+      }
+    } catch (e) {
+      // URL 解析失败，尝试简单提取
+      const lastSlash = url.lastIndexOf('/');
+      if (lastSlash !== -1) {
+        let afterSlash = url.slice(lastSlash + 1);
+        afterSlash = afterSlash.split('?')[0].split('#')[0];
+        if (afterSlash && afterSlash.includes('.')) {
+          try {
+            afterSlash = decodeURIComponent(afterSlash);
+          } catch (e) {}
+          afterSlash = afterSlash.replace(/[<>:"/\\|?*]/g, '_');
+          return afterSlash;
+        }
+      }
+    }
+    return null;
+  }
+
+  // 从 MIME 类型获取扩展名
+  function getExtFromMimeType(mimeType) {
+    if (!mimeType) return null;
+    const mimeMap = {
+      'image/jpeg': 'jpg',
+      'image/jpg': 'jpg',
+      'image/png': 'png',
+      'image/gif': 'gif',
+      'image/webp': 'webp',
+      'image/bmp': 'bmp',
+      'video/mp4': 'mp4',
+      'video/webm': 'webm',
+      'video/ogg': 'ogv',
+      'application/octet-stream': 'bin'
+    };
+    for (const [mime, ext] of Object.entries(mimeMap)) {
+      if (mimeType.toLowerCase().includes(mime)) return ext;
+    }
+    return null;
+  }
+
+  // 从 data URL 获取扩展名
+  function getExtFromDataUrl(url) {
+    if (!url || !url.startsWith('data:')) return 'png';
+    const mimeMatch = url.match(/^data:([^;,]+)/);
+    if (mimeMatch) {
+      const ext = getExtFromMimeType(mimeMatch[1]);
+      if (ext) return ext;
+    }
+    return 'png';
+  }
+
+  // 生成备用文件名
+  function generateFilename(prompt, index, ext = 'png') {
+    const timestamp = Date.now();
+    const random = Math.random().toString(36).substring(2, 8);
+    
+    // 清理提示词用于文件名
+    let safePrompt = '';
+    if (prompt) {
+      safePrompt = prompt
+        .replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_')
+        .substring(0, 20)
+        .replace(/_+/g, '_')
+        .replace(/^_+|_+$/g, '');
+    }
+    
+    if (safePrompt) {
+      return `grok_${safePrompt}_${index}_${random}.${ext}`;
+    }
+    return `grok_${timestamp}_${index}_${random}.${ext}`;
+  }
+
+  // 获取文件扩展名
+  function getFileExtension(filename) {
+    if (!filename) return '';
+    const parts = filename.split('.');
+    return parts.length > 1 ? parts.pop().toLowerCase() : '';
+  }
+
+  // ==================== 单张下载（修复版）====================
+  async function downloadFile(url, prompt, isVideo) {
+    if (!url) {
+      Atoms.showError('下载链接为空');
+      return;
+    }
+
+    console.log('下载文件:', { url: url.substring(0, 50) + '...', isVideo });
+
+    // 尝试获取文件名
+    let filename = extractFilenameFromUrl(url);
+    let ext = '';
+
+    if (!filename) {
+      // 无法从 URL 提取，使用备用方案
+      if (url.startsWith('data:')) {
+        ext = isVideo ? 'mp4' : getExtFromDataUrl(url);
+      } else {
+        ext = isVideo ? 'mp4' : 'png';
+      }
+      filename = generateFilename(prompt, 1, ext);
+    } else {
+      ext = getFileExtension(filename);
+      // 确保扩展名正确
+      if (!ext) {
+        ext = isVideo ? 'mp4' : 'png';
+        filename += '.' + ext;
       }
     }
 
-    elements.downloadSelected.addEventListener('click', async () => {
-      const cards = Array.from(selectedCards);
-      for (let i = 0; i < cards.length; i++) {
-        await downloadFile(cards[i].dataset.url);
-        if (i < cards.length - 1) await new Promise(r => setTimeout(r, 2000));
+    console.log('下载文件名:', filename);
+
+    // data URL 直接下载
+    if (url.startsWith('data:')) {
+      try {
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        return;
+      } catch (e) {
+        console.error('data URL 下载失败:', e);
+        Atoms.showError('下载失败，请尝试右键保存');
+        return;
       }
+    }
+
+    // 尝试 fetch 下载
+    try {
+      const response = await fetch(url, { 
+        mode: 'cors',
+        cache: 'force-cache'
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const blob = await response.blob();
+      
+      // 如果 blob 有 type，尝试更新扩展名
+      if (blob.type && !getFileExtension(filename)) {
+        const mimeExt = getExtFromMimeType(blob.type);
+        if (mimeExt) {
+          filename += '.' + mimeExt;
+        }
+      }
+
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      // 延迟释放 blob URL
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
+      
+    } catch (e) {
+      console.warn('fetch 下载失败，回退到直接链接:', e);
+      
+      // 回退方案：直接打开链接
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      Atoms.showError('若未开始下载，请右键图片选择"另存为"');
+    }
+  }
+
+  // ==================== 多选下载 ZIP（修复版）====================
+  async function downloadSelectedAsZip() {
+    // 获取所有选中的卡片
+    const cardElements = Array.from(document.querySelectorAll('.card'));
+    const selectedCardsArray = cardElements.filter(card => {
+      const checkbox = card.querySelector('.select-checkbox');
+      return checkbox && checkbox.checked;
     });
-    elements.cancelSelection.addEventListener('click', () => {
-      selectedCards.clear();
-      document.querySelectorAll('.select-checkbox').forEach(cb => cb.checked = false);
-      disableMultiSelectMode();
-    });
-    elements.selectAll.addEventListener('click', () => {
-      document.querySelectorAll('.card').forEach(card => {
-        const checkbox = card.querySelector('.select-checkbox');
-        if (!checkbox.checked) {
-          checkbox.checked = true;
-          selectedCards.add(card);
+
+    console.log('选中卡片数:', selectedCardsArray.length);
+
+    if (selectedCardsArray.length === 0) {
+      Atoms.showError('请先选择要下载的文件');
+      return;
+    }
+
+    // 更新按钮状态
+    const originalBtnText = elements.downloadSelected.innerHTML;
+    elements.downloadSelected.innerHTML = '<i class="fas fa-spinner spinner mr-1"></i> 打包中...';
+    elements.downloadSelected.disabled = true;
+
+    const zip = new JSZip();
+    const folder = zip.folder('grok_downloads_' + Date.now());
+    let successCount = 0;
+    let failCount = 0;
+
+    try {
+      // 并行下载所有文件
+      const downloadPromises = selectedCardsArray.map(async (card, index) => {
+        const url = card.dataset.url;
+        const prompt = card.dataset.prompt || '';
+        const isVideo = card.dataset.isVideo === 'true';
+
+        if (!url) {
+          console.warn('卡片没有 URL:', card);
+          failCount++;
+          return;
+        }
+
+        console.log(`处理第 ${index + 1} 个文件:`, url.substring(0, 50) + '...');
+
+        // 获取文件名
+        let filename = extractFilenameFromUrl(url);
+        if (!filename) {
+          let ext = isVideo ? 'mp4' : 'png';
+          if (url.startsWith('data:')) {
+            ext = isVideo ? 'mp4' : getExtFromDataUrl(url);
+          }
+          filename = generateFilename(prompt, index + 1, ext);
+        }
+
+        // 确保文件名唯一
+        const baseName = filename.replace(/\.[^/.]+$/, '');
+        const ext = getFileExtension(filename) || (isVideo ? 'mp4' : 'png');
+        filename = `${baseName}_${index + 1}.${ext}`;
+
+        try {
+          if (url.startsWith('data:')) {
+            // data URL 直接处理
+            try {
+              const response = await fetch(url);
+              const blob = await response.blob();
+              folder.file(filename, blob);
+              successCount++;
+            } catch (e) {
+              console.warn('data URL 处理失败:', e);
+              // 保存为文本文件包含链接
+              const txtContent = `Data URL (无法直接下载):\n提示词: ${prompt}\n类型: ${isVideo ? '视频' : '图像'}`;
+              folder.file(filename.replace(/\.[^/.]+$/, '') + '_info.txt', txtContent);
+              failCount++;
+            }
+          } else {
+            // 普通 URL，尝试 fetch
+            try {
+              const response = await fetch(url, { 
+                mode: 'cors',
+                cache: 'force-cache'
+              });
+              
+              if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+              }
+
+              const blob = await response.blob();
+              
+              // 根据 blob type 更新扩展名
+              if (blob.type) {
+                const mimeExt = getExtFromMimeType(blob.type);
+                if (mimeExt && !filename.endsWith('.' + mimeExt)) {
+                  filename = filename.replace(/\.[^/.]+$/, '') + '.' + mimeExt;
+                }
+              }
+
+              folder.file(filename, blob);
+              successCount++;
+            } catch (e) {
+              console.warn(`下载失败 ${url}:`, e);
+              // 保存链接到文本文件
+              const txtFilename = filename.replace(/\.[^/.]+$/, '') + '_link.txt';
+              const txtContent = `下载链接: ${url}\n提示词: ${prompt}\n类型: ${isVideo ? '视频' : '图像'}\n错误: ${e.message}`;
+              folder.file(txtFilename, txtContent);
+              failCount++;
+            }
+          }
+        } catch (e) {
+          console.error('处理文件时出错:', e);
+          failCount++;
         }
       });
-      updateSelectionBar();
-    });
 
-    const InputMolecule = {
-      init() {
-        elements.prompt.addEventListener('input', () => this.updateCharCount());
-        elements.inputImage.addEventListener('change', (e) => {
-          const files = e.target.files;
-          if (files.length === 0) { this.clearImage(); return; }
-          state.images = [];
-          elements.previewGrid.innerHTML = '';
-          elements.previewContainer.style.display = 'none';
-          const isEdit = elements.model.value === 'grok-imagine-1.0-edit';
-          const maxImages = isEdit ? 16 : 1;
-          const processFiles = isEdit ? Array.from(files).slice(0, maxImages) : [files[0]];
-          if (processFiles.length === 0) { this.clearImage(); return; }
-          elements.previewContainer.style.display = 'block';
-          processFiles.forEach((file) => {
-            if (!file.type.startsWith('image/')) { Atoms.showError('只能上传图片文件'); return; }
-            if (file.size > 10 * 1024 * 1024) { Atoms.showError('单张图片不能超过10MB'); return; }
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-              state.images.push(ev.target.result);
-              const item = document.createElement('div');
-              item.className = 'preview-item aspect-square';
-              const img = document.createElement('img');
-              img.src = ev.target.result;
-              img.alt = `参考图${state.images.length}`;
-              img.style.width = '100%'; img.style.height = '100%'; img.style.objectFit = 'cover';
-              item.appendChild(img);
-              elements.previewGrid.appendChild(item);
-              elements.imageCount.textContent = state.images.length;
-              this.updateParams();
-            };
-            reader.onerror = () => Atoms.showError('读取图片失败');
-            reader.readAsDataURL(file);
-          });
-          if (files.length > maxImages && isEdit) Atoms.showError('编辑模式最多支持16张参考图像，已自动截取前16张');
+      // 等待所有下载完成
+      await Promise.all(downloadPromises);
+
+      console.log('下载完成:', { success: successCount, fail: failCount });
+
+      if (successCount === 0) {
+        Atoms.showError('所有文件下载失败，请检查网络连接');
+        return;
+      }
+
+      // 生成 ZIP
+      console.log('生成 ZIP 文件...');
+      const content = await zip.generateAsync({ 
+        type: 'blob',
+        compression: 'DEFLATE',
+        compressionOptions: { level: 6 }
+      });
+
+      // 下载 ZIP
+      const zipUrl = URL.createObjectURL(content);
+      const link = document.createElement('a');
+      link.href = zipUrl;
+      link.download = `grok_selected_${successCount}files_${Date.now()}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      setTimeout(() => URL.revokeObjectURL(zipUrl), 2000);
+
+      // 显示结果
+      if (failCount > 0) {
+        Atoms.showError(`下载完成: ${successCount} 个成功, ${failCount} 个失败`);
+      }
+
+    } catch (e) {
+      console.error('打包失败:', e);
+      Atoms.showError('打包失败: ' + e.message);
+    } finally {
+      // 恢复按钮状态
+      elements.downloadSelected.innerHTML = originalBtnText;
+      elements.downloadSelected.disabled = false;
+    }
+  }
+
+  // ==================== 多选模式 ====================
+  function enableMultiSelectMode() {
+    if (multiSelectMode) return;
+    multiSelectMode = true;
+    document.body.classList.add('multi-select-mode');
+    updateSelectionBar();
+  }
+
+  function disableMultiSelectMode() {
+    multiSelectMode = false;
+    document.body.classList.remove('multi-select-mode');
+    // 取消所有选中
+    document.querySelectorAll('.select-checkbox').forEach(cb => cb.checked = false);
+    updateSelectionBar();
+  }
+
+  function toggleCardSelection(card) {
+    const checkbox = card.querySelector('.select-checkbox');
+    if (!checkbox) return;
+    
+    checkbox.checked = !checkbox.checked;
+    updateSelectionBar();
+    
+    // 如果没有选中的，退出多选模式
+    const anyChecked = document.querySelectorAll('.select-checkbox:checked').length > 0;
+    if (!anyChecked) {
+      disableMultiSelectMode();
+    }
+  }
+
+  function updateSelectionBar() {
+    const checkedCount = document.querySelectorAll('.select-checkbox:checked').length;
+    elements.selectedCount.textContent = checkedCount;
+    
+    if (checkedCount > 0) {
+      elements.selectionBar.classList.remove('hidden');
+      elements.selectionBar.classList.add('show');
+    } else {
+      elements.selectionBar.classList.add('hidden');
+      elements.selectionBar.classList.remove('show');
+    }
+  }
+
+  // 绑定多选按钮事件
+  elements.downloadSelected.addEventListener('click', downloadSelectedAsZip);
+  
+  elements.cancelSelection.addEventListener('click', () => {
+    disableMultiSelectMode();
+  });
+  
+  elements.selectAll.addEventListener('click', () => {
+    const allCards = document.querySelectorAll('.card');
+    const allChecked = document.querySelectorAll('.select-checkbox:checked').length === allCards.length;
+    
+    allCards.forEach(card => {
+      const checkbox = card.querySelector('.select-checkbox');
+      if (checkbox) {
+        checkbox.checked = !allChecked;
+      }
+    });
+    
+    updateSelectionBar();
+  });
+
+  // ==================== 历史记录 ====================
+  const History = {
+    async load() {
+      try {
+        const items = await db.history.orderBy('timestamp').reverse().toArray();
+        items.forEach(item => {
+          const card = item.isVideo
+            ? Atoms.createPlaceholderVideoCard(item.url, item.prompt)
+            : Atoms.createPlaceholderCard(item.url, item.prompt);
+          card.dataset.isVideo = String(!!item.isVideo);
+          card.dataset.prompt = item.prompt || '';
+          elements.results.appendChild(card);
+          if (item.isVideo) Atoms.loadVideoPreview(card, item.url);
+          else Atoms.loadImagePreview(card, item.url);
         });
-        elements.clearImage.addEventListener('click', () => this.clearImage());
-        elements.model.addEventListener('change', () => { this.updateParams(); this.updateReferenceLabel(); });
-      },
-      updateCharCount() { elements.charCount.textContent = elements.prompt.value.length; },
-      clearImage() {
+        if (items.length > 0) elements.empty.classList.add('hidden');
+      } catch (e) {
+        console.error('加载历史失败:', e);
+      }
+    },
+    async save(url, isVideo, prompt) {
+      try {
+        const existing = await db.history.where('url').equals(url).first();
+        if (existing) return;
+        await db.history.add({
+          url,
+          isVideo,
+          prompt: (prompt || '').substring(0, 200),
+          timestamp: Date.now()
+        });
+      } catch (e) {
+        console.error('保存历史失败:', e);
+      }
+    },
+    async clear() {
+      await db.history.clear();
+      elements.results.innerHTML = '';
+      elements.empty.classList.remove('hidden');
+      disableMultiSelectMode();
+      generatedCount = 0;
+      elements.generationCounter.textContent = '已生成 0 个';
+    }
+  };
+
+  // ==================== 原子层（含 API 调用、卡片创建）====================
+  const Atoms = {
+    apiBaseV1() {
+      if (!Config.isValid(config)) throw new Error('请先配置 API Base URL');
+      let base = (config.base || '').trim().replace(/\/+$/, '');
+      if (base.endsWith('/v1')) return base;
+      return base + '/v1';
+    },
+    buildUrl(endpoint) {
+      return this.apiBaseV1() + endpoint;
+    },
+    buildHeaders(isJson = true) {
+      const headers = {};
+      if (isJson) headers['Content-Type'] = 'application/json';
+      if (config.key && config.key.trim()) headers['Authorization'] = `Bearer ${config.key.trim()}`;
+      return headers;
+    },
+    extractUrl(content) {
+      if (!content) return null;
+      if (typeof content !== 'string') return null;
+      content = content.replace(/```[\s\S]*?```/g, '').trim();
+      if (content.startsWith('http') || content.startsWith('/')) return content;
+      const markdownMatch = content.match(/!\[([^\]]*)\]\((https?:\/\/[^\)]+)\)/);
+      if (markdownMatch) return markdownMatch[2];
+      const urlMatch = content.match(/(https?:\/\/[^\s<>"{}|\\^`]+)/);
+      if (urlMatch) return urlMatch[1];
+      return null;
+    },
+    // 新增：将 File 对象转为 Data URL
+    fileToDataUrl(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    },
+    createPlaceholderCard(url, prompt) {
+      const card = document.createElement('div');
+      card.className = 'card rounded-2xl glass overflow-hidden relative';
+      card.dataset.url = url || '';
+      card.dataset.prompt = prompt || '';
+      card.dataset.isVideo = 'false';
+
+      card.innerHTML = `
+        <input type="checkbox" class="select-checkbox absolute top-4 left-4 z-20 w-6 h-6 accent-primary rounded cursor-pointer">
+        <div class="image-placeholder bg-panel/50 flex items-center justify-center relative overflow-hidden min-h-64">
+          <i class="fas fa-spinner spinner text-5xl text-primary"></i>
+        </div>
+        <div class="overlay">
+          <div class="text-xs text-gray-300 mb-2 line-clamp-2">${prompt || ''}</div>
+          <button type="button" class="single-download block text-center py-3 btn-gradient rounded-xl text-black font-bold text-sm w-full mb-2">
+            <i class="fas fa-download mr-1"></i> 下载图像
+          </button>
+          <button type="button" class="copy-prompt-btn block text-center py-2 bg-panel rounded-xl text-white text-xs w-full hover:bg-panel/80">
+            <i class="fas fa-copy mr-1"></i> 复制提示词
+          </button>
+        </div>
+      `;
+
+      this.attachCardEvents(card);
+      return card;
+    },
+    createPlaceholderVideoCard(url, prompt) {
+      const card = document.createElement('div');
+      card.className = 'card rounded-2xl glass overflow-hidden relative';
+      card.dataset.url = url || '';
+      card.dataset.prompt = prompt || '';
+      card.dataset.isVideo = 'true';
+
+      card.innerHTML = `
+        <input type="checkbox" class="select-checkbox absolute top-4 left-4 z-20 w-6 h-6 accent-primary rounded cursor-pointer">
+        <div class="aspect-video bg-panel/50 flex items-center justify-center relative overflow-hidden video-container">
+          <i class="fas fa-spinner spinner text-5xl text-primary"></i>
+        </div>
+        <div class="overlay">
+          <div class="text-xs text-gray-300 mb-2 line-clamp-2">${prompt || ''}</div>
+          <button type="button" class="single-download block text-center py-3 btn-gradient rounded-xl text-black font-bold text-sm w-full mb-2">
+            <i class="fas fa-download mr-1"></i> 下载视频
+          </button>
+          <div class="grid grid-cols-2 gap-2">
+            <button type="button" class="copy-url-btn block text-center py-2 bg-panel rounded-xl text-white text-xs hover:bg-panel/80">
+              <i class="fas fa-link mr-1"></i> 复制链接
+            </button>
+            <button type="button" class="copy-prompt-btn block text-center py-2 bg-panel rounded-xl text-white text-xs hover:bg-panel/80">
+              <i class="fas fa-copy mr-1"></i> 提示词
+            </button>
+          </div>
+        </div>
+      `;
+
+      this.attachCardEvents(card);
+      return card;
+    },
+    attachCardEvents(card) {
+      card.addEventListener('touchstart', () => card.classList.add('touched'), { passive: true });
+      card.addEventListener('touchend', () => card.classList.remove('touched'), { passive: true });
+      card.addEventListener('mouseleave', () => card.classList.remove('touched'));
+
+      card.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        enableMultiSelectMode();
+        const checkbox = card.querySelector('.select-checkbox');
+        if (checkbox) checkbox.checked = true;
+        updateSelectionBar();
+      });
+
+      card.addEventListener('click', (e) => {
+        if (!multiSelectMode) return;
+        const clickedButton = e.target.closest('button') || e.target.closest('a') || e.target.closest('input');
+        if (clickedButton) return;
+        e.preventDefault();
+        toggleCardSelection(card);
+      });
+
+      const downloadBtn = card.querySelector('.single-download');
+      if (downloadBtn) {
+        downloadBtn.addEventListener('click', async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const url = card.dataset.url;
+          const prompt = card.dataset.prompt;
+          const isVideo = card.dataset.isVideo === 'true';
+          if (!url) {
+            Atoms.showError('下载链接为空');
+            return;
+          }
+          await downloadFile(url, prompt, isVideo);
+        });
+      }
+
+      const copyPromptBtn = card.querySelector('.copy-prompt-btn');
+      if (copyPromptBtn) {
+        copyPromptBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          navigator.clipboard.writeText(card.dataset.prompt || '').then(() => {
+            const orig = copyPromptBtn.innerHTML;
+            copyPromptBtn.innerHTML = '<i class="fas fa-check mr-1"></i> 已复制';
+            setTimeout(() => copyPromptBtn.innerHTML = orig, 2000);
+          });
+        });
+      }
+
+      const copyUrlBtn = card.querySelector('.copy-url-btn');
+      if (copyUrlBtn) {
+        copyUrlBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          navigator.clipboard.writeText(card.dataset.url || '').then(() => {
+            const orig = copyUrlBtn.innerHTML;
+            copyUrlBtn.innerHTML = '<i class="fas fa-check mr-1"></i> 已复制';
+            setTimeout(() => copyUrlBtn.innerHTML = orig, 2000);
+          });
+        });
+      }
+    },
+    async loadImagePreview(card, url) {
+      const placeholder = card.querySelector('.image-placeholder');
+      if (!placeholder) return;
+
+      const img = document.createElement('img');
+      img.src = url;
+      img.className = 'w-full h-auto object-cover block';
+      img.alt = card.dataset.prompt || '生成的图像';
+
+      img.onload = () => {
+        placeholder.innerHTML = '';
+        placeholder.appendChild(img);
+      };
+
+      img.onerror = () => {
+        placeholder.innerHTML = `
+          <div class="text-center p-4">
+            <i class="fas fa-exclamation-circle text-3xl text-red-500 mb-2"></i>
+            <p class="text-gray-400 text-xs">加载失败<br>可尝试下载查看</p>
+          </div>
+        `;
+      };
+    },
+    async loadVideoPreview(card, url) {
+      const placeholder = card.querySelector('.video-container');
+      if (!placeholder) return;
+      placeholder.innerHTML = '';
+
+      const video = document.createElement('video');
+      video.controls = false;
+      video.muted = true;
+      video.playsInline = true;
+      video.loop = true;
+      video.preload = 'metadata';
+      video.className = 'w-full h-full object-cover';
+
+      const source = document.createElement('source');
+      source.src = url;
+      source.type = 'video/mp4';
+      video.appendChild(source);
+
+      video.onerror = () => {
+        placeholder.innerHTML = `
+          <div class="flex flex-col items-center justify-center h-full text-center p-8">
+            <i class="fas fa-play-circle text-6xl text-primary mb-4 opacity-50"></i>
+            <p class="text-gray-400 text-sm">预览不可用<br>请使用下载查看</p>
+          </div>
+        `;
+      };
+
+      placeholder.appendChild(video);
+      if (videoObserver) videoObserver.observe(video);
+    },
+    showError(message) {
+      console.error('错误:', message);
+      elements.errorText.textContent = message;
+      elements.error.classList.remove('hidden');
+      setTimeout(() => elements.error.classList.add('hidden'), 5000);
+    },
+    // 改进的流式请求：自动检测是否为流式响应
+    async apiPostStream(endpoint, payload, onEvent, signal) {
+      const isForm = payload instanceof FormData;
+      const res = await fetch(this.buildUrl(endpoint), {
+        method: 'POST',
+        headers: isForm ? this.buildHeaders(false) : this.buildHeaders(true),
+        body: isForm ? payload : JSON.stringify(payload),
+        signal
+      });
+
+      if (!res.ok) {
+        let msg = `请求失败: HTTP ${res.status}`;
+        try {
+          const errData = await res.json();
+          msg = errData?.error?.message || msg;
+        } catch (_) {}
+        throw new Error(msg);
+      }
+
+      const contentType = res.headers.get('Content-Type') || '';
+
+      // 流式处理（text/event-stream）
+      if (contentType.includes('text/event-stream')) {
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          
+          let lines = buffer.split('\n');
+          buffer = lines.pop();
+
+          for (const line of lines) {
+            if (line.startsWith('data:')) {
+              const data = line.slice(5).trim();
+              if (data === '[DONE]') return;
+              try {
+                const parsed = JSON.parse(data);
+                onEvent({ data: parsed });
+              } catch (e) {
+                onEvent({ data });
+              }
+            }
+          }
+        }
+      } else {
+        // 非流式：直接解析整个 JSON
+        const result = await res.json();
+        onEvent({ data: result });
+      }
+    }
+  };
+
+  // ==================== 输入处理 ====================
+  const InputMolecule = {
+    init() {
+      elements.prompt.addEventListener('input', () => {
+        elements.charCount.textContent = elements.prompt.value.length;
+      });
+      
+      elements.model.addEventListener('change', () => {
+        this.updateParams();
+        this.updateReferenceLabel();
+        this.syncFileInputMultiple();
+        this.updateStrengthVisibility(); // 更新强度参数显示
+      });
+
+      elements.inputImage.addEventListener('change', (e) => {
+        const files = e.target.files;
+        if (!files || files.length === 0) {
+          this.clearImage();
+          return;
+        }
+
         state.images = [];
         elements.previewGrid.innerHTML = '';
         elements.previewContainer.style.display = 'none';
-        elements.inputImage.value = '';
-        elements.imageCount.textContent = '0';
-        this.updateParams();
-      },
-      updateReferenceLabel() {
-        const isEdit = elements.model.value === 'grok-imagine-1.0-edit';
-        elements.referenceLabel.innerHTML = isEdit
-          ? '<i class="fas fa-image mr-2 text-primary"></i> 参考图像（必填，支持多张，最多16张）'
-          : '<i class="fas fa-image mr-2 text-primary"></i> 参考图像（可选）';
-      },
-      updateParams() {
-        const isVideo = elements.model.value.includes('video');
-        const isEdit = elements.model.value === 'grok-imagine-1.0-edit';
-        const hasImage = state.images.length > 0;
-        elements.nParam.classList.toggle('hidden', !(!isVideo && (!hasImage || isEdit)));
-        elements.strengthParam.classList.toggle('hidden', !(hasImage && !isEdit && !isVideo));
-        elements.lengthParam.classList.toggle('hidden', !isVideo);
-        elements.aspectParam.classList.toggle('hidden', !(isVideo || (!hasImage && !isEdit)));
-      }
-    };
 
-    const Coordinator = {
-      async generate() {
-        const prompt = elements.prompt.value.trim();
-        if (!prompt) { Atoms.showError('请填写提示词'); elements.prompt.focus(); return; }
-        if (prompt.length < 2) { Atoms.showError('提示词太短，请至少输入 2 个字符'); elements.prompt.focus(); return; }
-        const selectedModel = elements.model.value;
-        const isVideo = selectedModel.includes('video');
-        const isEdit = selectedModel === 'grok-imagine-1.0-edit';
-        const images = state.images;
-        if (isEdit && images.length === 0) { Atoms.showError('图像编辑模式必须上传至少一张参考图像'); return; }
-        Atoms.showProgress();
-        try {
-          let results;
-          if (isVideo) results = await this.generateVideo(prompt, images.length > 0 ? images[0] : null);
-          else if (isEdit) results = await this.generateImageEdit(prompt);
-          else if (images.length > 0) results = await this.generateImageVariants(prompt, images[0]);
-          else results = await this.generateImages(prompt);
-          if (!results || results.length === 0) throw new Error('无生成结果');
-          results.forEach(item => {
-            const card = isVideo ? Atoms.createPlaceholderVideoCard(item.url, prompt) : Atoms.createPlaceholderCard(item.url, prompt);
-            card.dataset.isVideo = isVideo;
-            elements.results.prepend(card);
-            if (isVideo) Atoms.loadVideoPreview(card, item.url);
-            else Atoms.loadImagePreview(card, item.url);
-            History.save(item.url, isVideo, prompt).catch(e => console.error('保存历史失败', e));
-          });
-          elements.empty.classList.add('hidden');
-        } catch (err) {
-          console.error('生成失败:', err);
-          Atoms.showError(err.message || '生成失败，请检查网络或配额');
-        } finally {
-          Atoms.hideProgress();
+        const isEdit = elements.model.value === 'grok-imagine-1.0-edit';
+        const maxImages = isEdit ? 16 : 1;
+        const processFiles = Array.from(files).slice(0, maxImages);
+
+        if (processFiles.length === 0) {
+          this.clearImage();
+          return;
         }
-      },
-      generateImages(prompt) {
-        const n = parseInt(elements.imgN.value) || 4;
-        const size = elements.aspect.value;
-        return Atoms.apiPost('/images/generations', {
-          model: elements.model.value,
-          prompt,
-          n: Math.min(Math.max(n, 1), 10),
-          size,
-          concurrency: 3,
-          response_format: "url"
-        }).then(data => {
-          if (!data.data || !Array.isArray(data.data)) throw new Error('API 返回数据格式错误');
-          return data.data.map(item => ({ url: item.url || Atoms.extractUrl(item) })).filter(item => item.url);
-        });
-      },
-      generateVideo(prompt, base64Image) {
-        const body = {
-          model: elements.model.value,
-          messages: [],
-          n: 1,
-          video_config: {
-            aspect_ratio: elements.aspect.value || "9:16",
-            video_length: parseInt(elements.length.value) || 6,
-            resolution: "HD"
-          }
-        };
-        if (base64Image) body.messages.push({ role: "user", content: [{ type: "text", text: prompt }, { type: "image_url", image_url: { url: base64Image } }] });
-        else body.messages.push({ role: "user", content: prompt });
-        return Atoms.apiPost('/chat/completions', body).then(data => {
-          if (!data.choices || !Array.isArray(data.choices)) throw new Error('API 返回数据格式错误');
-          return data.choices.map(item => ({ url: Atoms.extractUrl(item.message?.content) || item.message?.content })).filter(item => item.url);
-        });
-      },
-      generateImageVariants(prompt, base64Image) {
-        return Atoms.apiPost('/chat/completions', {
-          model: elements.model.value,
-          messages: [{ role: "user", content: [{ type: "text", text: prompt }, { type: "image_url", image_url: { url: base64Image } }] }],
-          n: 1,
-          strength: parseFloat(elements.strength.value) || 0.75
-        }).then(data => {
-          if (!data.choices || !Array.isArray(data.choices)) throw new Error('API 返回数据格式错误');
-          return data.choices.map(item => ({ url: Atoms.extractUrl(item.message?.content) || item.message?.content })).filter(item => item.url);
-        });
-      },
-      generateImageEdit(prompt) {
-        const formData = new FormData();
-        formData.append('model', 'grok-imagine-1.0-edit');
-        formData.append('prompt', prompt);
-        formData.append('n', elements.imgN.value || '1');
-        formData.append('response_format', 'url');
-        state.images.forEach((base64, index) => {
-          const base64Data = base64.split(',')[1];
-          const byteCharacters = atob(base64Data);
-          const byteNumbers = new Array(byteCharacters.length);
-          for (let i = 0; i < byteCharacters.length; i++) byteNumbers[i] = byteCharacters.charCodeAt(i);
-          const byteArray = new Uint8Array(byteNumbers);
-          const blob = new Blob([byteArray], { type: 'image/png' });
-          formData.append('image', blob, `reference_${index}.png`);
-        });
-        return Atoms.apiPostForm('/images/edits', formData).then(data => {
-          if (!data.data || !Array.isArray(data.data)) throw new Error('API 返回数据格式错误');
-          return data.data.map(item => ({ url: item.url || Atoms.extractUrl(item) })).filter(item => item.url);
-        });
-      }
-    };
 
-    function showConfigModal() {
-      elements.configBase.value = config.base;
-      elements.configKey.value = config.key;
-      elements.configHistoryKey.value = config.historyKey;
-      elements.configModal.classList.remove('hidden');
+        elements.previewContainer.style.display = 'block';
+
+        processFiles.forEach((file) => {
+          if (!file.type.startsWith('image/')) {
+            Atoms.showError('只能上传图片文件');
+            return;
+          }
+          if (file.size > 10 * 1024 * 1024) {
+            Atoms.showError('单张图片不能超过10MB');
+            return;
+          }
+
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+            const dataUrl = ev.target.result;
+            state.images.push({ file, dataUrl });
+
+            const item = document.createElement('div');
+            item.className = 'preview-item aspect-square';
+
+            const img = document.createElement('img');
+            img.src = dataUrl;
+            img.alt = `参考图${state.images.length}`;
+
+            item.appendChild(img);
+            elements.previewGrid.appendChild(item);
+            elements.imageCount.textContent = state.images.length;
+            this.updateStrengthVisibility(); // 更新强度参数显示
+          };
+          reader.readAsDataURL(file);
+        });
+      });
+
+      elements.clearImage.addEventListener('click', () => {
+        this.clearImage();
+        this.updateStrengthVisibility(); // 更新强度参数显示
+      });
+    },
+    updateCharCount() {
+      elements.charCount.textContent = elements.prompt.value.length;
+    },
+    clearImage() {
+      state.images = [];
+      elements.previewGrid.innerHTML = '';
+      elements.previewContainer.style.display = 'none';
+      elements.inputImage.value = '';
+      elements.imageCount.textContent = '0';
+    },
+    updateReferenceLabel() {
+      const isEdit = elements.model.value === 'grok-imagine-1.0-edit';
+      const isVideo = elements.model.value.includes('video');
+
+      if (isEdit) {
+        elements.referenceLabel.innerHTML = '<i class="fas fa-image mr-2 text-primary"></i> 参考图像（必填，支持多张，最多16张）';
+      } else if (isVideo) {
+        elements.referenceLabel.innerHTML = '<i class="fas fa-image mr-2 text-primary"></i> 参考图像（可选：用于图生视频）';
+      } else {
+        elements.referenceLabel.innerHTML = '<i class="fas fa-image mr-2 text-primary"></i> 参考图像（可选）';
+      }
+    },
+    syncFileInputMultiple() {
+      elements.inputImage.multiple = elements.model.value === 'grok-imagine-1.0-edit';
+    },
+    updateParams() {
+      const isVideo = elements.model.value.includes('video');
+      const isEdit = elements.model.value === 'grok-imagine-1.0-edit';
+      const hasImage = state.images.length > 0;
+
+      elements.videoParams.classList.toggle('hidden', !isVideo);
+      elements.imageParams.classList.toggle('hidden', isVideo);
+      
+      // 显示/隐藏强度参数：当有参考图且不是编辑模式且不是视频时显示
+      this.updateStrengthVisibility();
+    },
+    updateStrengthVisibility() {
+      const isVideo = elements.model.value.includes('video');
+      const isEdit = elements.model.value === 'grok-imagine-1.0-edit';
+      const hasImage = state.images.length > 0;
+      // 仅当图像生成模型（非视频非编辑）且有参考图时显示
+      const shouldShow = !isVideo && !isEdit && hasImage;
+      elements.strengthParam.classList.toggle('hidden', !shouldShow);
     }
-    function hideConfigModal() {
-      elements.configModal.classList.add('hidden');
-    }
-    elements.openConfig.addEventListener('click', showConfigModal);
-    elements.saveConfig.addEventListener('click', () => {
-      const newConfig = {
-        base: elements.configBase.value.trim(),
-        key: elements.configKey.value.trim(),
-        historyKey: elements.configHistoryKey.value.trim() || 'grok_imagine_history'
+  };
+
+  // ==================== 生成控制器（3并发，每批2张，流式持续）====================
+  const GenerationController = {
+    running: false,
+    abortController: null,
+    workerPromises: [],
+
+    setUI(running) {
+      this.running = running;
+      if (running) {
+        elements.generationProgress.classList.add('show');
+        elements.generateBtn.innerHTML = '<i class="fas fa-stop mr-2"></i> 停止';
+        generatedCount = 0;
+        elements.generationCounter.textContent = '已生成 0 个';
+        generationStartTime = Date.now();
+        this.startTimer();
+      } else {
+        elements.generationProgress.classList.remove('show');
+        elements.generateBtn.innerHTML = '<i class="fas fa-magic mr-2"></i> 生成';
+        if (timerInterval) {
+          clearInterval(timerInterval);
+          timerInterval = null;
+        }
+      }
+    },
+
+    startTimer() {
+      timerInterval = setInterval(() => {
+        if (generationStartTime) {
+          const elapsed = Math.floor((Date.now() - generationStartTime) / 1000);
+          elements.generationTimer.textContent = `总耗时 ${elapsed}s`;
+        }
+      }, 100);
+    },
+
+    stop() {
+      this.running = false;
+      if (this.abortController) {
+        this.abortController.abort();
+        this.abortController = null;
+      }
+      this.workerPromises = [];
+      this.setUI(false);
+    },
+
+    // 图像单批次生成（流式）- 完全重构，支持通过 /chat/completions 处理带参考图的请求
+    async generateOneImageBatch(signal) {
+      const prompt = elements.prompt.value.trim();
+      const hasFiles = state.images.length > 0;
+      const files = hasFiles ? state.images.map(x => x.file) : [];
+      const imageSize = elements.imageSize.value;
+      const responseFormat = elements.responseFormat.value;
+      const strength = elements.strength?.value; // 如果有强度参数，用于变体生成
+      const isEdit = elements.model.value === 'grok-imagine-1.0-edit';
+
+      const onImageUrl = (url) => {
+        if (!url) return;
+
+        const card = Atoms.createPlaceholderCard(url, prompt);
+        elements.results.prepend(card);
+        Atoms.loadImagePreview(card, url);
+        History.save(url, false, prompt).catch(() => {});
+        generatedCount++;
+        elements.generationCounter.textContent = `已生成 ${generatedCount} 个`;
+        elements.empty.classList.add('hidden');
       };
-      if (!newConfig.base || !newConfig.key) { Atoms.showError('请填写完整的 Base URL 和 API Key'); return; }
-      config = newConfig;
-      HISTORY_KEY = config.historyKey;
-      Config.save(config);
-      hideConfigModal();
-      Atoms.showError('配置已保存');
-    });
-    elements.closeConfig.addEventListener('click', hideConfigModal);
-    elements.configModal.addEventListener('click', (e) => { if (e.target === elements.configModal) hideConfigModal(); });
 
-    window.addEventListener('beforeunload', () => { BlobManager.revokeAll(); });
+      if (hasFiles) {
+        if (isEdit) {
+          // 编辑接口 - 使用 /v1/images/edits (保持原逻辑)
+          const formData = new FormData();
+          formData.append('model', 'grok-imagine-1.0-edit');
+          formData.append('prompt', prompt);
+          formData.append('n', String(FIXED_IMAGE_N));
+          formData.append('stream', 'true');
+          formData.append('size', imageSize);
+          formData.append('response_format', responseFormat);
 
-    document.addEventListener('DOMContentLoaded', async () => {
-      // 初始化视频懒播放 Observer
-      videoObserver = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
-          const video = entry.target;
-          if (entry.isIntersecting) {
-            video.play().catch(() => {});
-          } else {
-            video.pause();
-          }
+          files.forEach((f, idx) => {
+            formData.append('image', f, f.name || `reference_${idx}.png`);
+          });
+
+          await Atoms.apiPostStream('/images/edits', formData, (evt) => {
+            const data = evt.data;
+            if (data && Array.isArray(data.data)) {
+              data.data.forEach(item => {
+                if (item.url) onImageUrl(item.url);
+                else if (item.b64_json) onImageUrl(`data:image/png;base64,${item.b64_json}`);
+              });
+            } else if (data && data.url) onImageUrl(data.url);
+            else if (data && data.b64_json) onImageUrl(`data:image/png;base64,${data.b64_json}`);
+          }, signal);
+        } else {
+          // 变体接口 - 修复为调用 /v1/chat/completions
+          const firstFile = files[0]; // 变体通常只使用第一张图
+
+          // 将文件转为 Data URL（后端要求 image_url 必须是 URL 或 Data URI）
+          const dataUrl = await Atoms.fileToDataUrl(firstFile);
+
+          // 构造符合后端要求的消息格式
+          const messages = [
+            {
+              role: "user",
+              content: [
+                { type: "text", text: prompt },
+                { type: "image_url", image_url: { url: dataUrl } }
+              ]
+            }
+          ];
+
+          const body = {
+            model: "grok-imagine-1.0",      // 仍使用图像模型
+            messages: messages,
+            stream: true,                    // 保持流式
+            image_config: {                   // 图像专用配置
+              n: FIXED_IMAGE_N,
+              size: imageSize,
+              response_format: responseFormat,
+              strength: strength || '0.75'
+            }
+          };
+
+          await Atoms.apiPostStream('/chat/completions', body, (evt) => {
+            const data = evt.data;
+            // 流式响应中可能直接返回图片数据
+            if (data && data.url) {
+              onImageUrl(data.url);
+            } else if (data && data.b64_json) {
+              onImageUrl(`data:image/png;base64,${data.b64_json}`);
+            } else if (data && Array.isArray(data.data)) {
+              // 处理非流式响应的数组格式（兼容）
+              data.data.forEach(item => {
+                if (item.url) onImageUrl(item.url);
+                else if (item.b64_json) onImageUrl(`data:image/png;base64,${item.b64_json}`);
+              });
+            } else {
+              // 尝试从 choices 中提取（流式聊天补全常用格式）
+              const choices = data.choices || [];
+              for (const c of choices) {
+                const content = c.delta?.content || c.message?.content;
+                if (content && typeof content === 'string') {
+                  const url = Atoms.extractUrl(content);
+                  if (url) onImageUrl(url);
+                }
+              }
+            }
+          }, signal);
+        }
+      } else {
+        // 文生图 - 使用 /v1/images/generations
+        const body = {
+          model: 'grok-imagine-1.0',
+          prompt,
+          n: FIXED_IMAGE_N,
+          stream: true,
+          size: imageSize,
+          response_format: responseFormat
+        };
+
+        await Atoms.apiPostStream('/images/generations', body, (evt) => {
+          const data = evt.data;
+          if (data && data.url) onImageUrl(data.url);
+          else if (data && data.b64_json) onImageUrl(`data:image/png;base64,${data.b64_json}`);
+        }, signal);
+      }
+    },
+
+    // 视频单条生成（流式）- 保持不变
+    async generateOneVideo(signal) {
+      const prompt = elements.prompt.value.trim();
+      const hasImage = state.images.length > 0;
+      const dataUrl = hasImage ? state.images[0].dataUrl : null;
+
+      const body = {
+        model: elements.model.value,
+        stream: true,
+        reasoning_effort: elements.reasoningEffort.value || 'none',
+        temperature: Math.min(Math.max(parseFloat(elements.temperature.value) || 0.7, 0), 2),
+        top_p: Math.min(Math.max(parseFloat(elements.topP.value) || 0.95, 0), 1),
+        video_config: {
+          aspect_ratio: elements.videoAspect.value,
+          video_length: parseInt(elements.videoLength.value),
+          resolution_name: elements.videoResolution.value,
+          preset: elements.videoPreset.value
+        },
+        messages: []
+      };
+
+      if (dataUrl) {
+        body.messages.push({
+          role: "user",
+          content: [
+            { type: "text", text: prompt },
+            { type: "image_url", image_url: { url: dataUrl } }
+          ]
         });
-      }, { threshold: 0.5 });
+      } else {
+        body.messages.push({ role: "user", content: prompt });
+      }
 
-      if (!Config.isValid(config)) showConfigModal();
+      let accText = '';
+      let urlExtracted = false; // 防止重复添加卡片
+      await Atoms.apiPostStream('/chat/completions', body, (evt) => {
+        const d = evt.data;
+        if (!d || typeof d !== 'object') return;
 
-      await History.migrateFromLocalStorage();
-      await History.load();
+        const choices = Array.isArray(d.choices) ? d.choices : [];
+        for (const c of choices) {
+          const delta = c.delta || c.message || {};
+          const piece = delta.content;
+          if (typeof piece === 'string' && piece) accText += piece;
 
-      InputMolecule.init();
-      InputMolecule.updateCharCount();
-      InputMolecule.updateParams();
-      InputMolecule.updateReferenceLabel();
-
-      elements.generateBtn.addEventListener('click', () => Coordinator.generate());
-      elements.clearHistory.addEventListener('click', async () => {
-        if (confirm('确定要清除所有历史记录吗？此操作不可恢复。')) {
-          await History.clear();
+          const url = Atoms.extractUrl(accText);
+          if (url && !urlExtracted) {
+            urlExtracted = true;
+            const card = Atoms.createPlaceholderVideoCard(url, prompt);
+            elements.results.prepend(card);
+            Atoms.loadVideoPreview(card, url);
+            History.save(url, true, prompt).catch(() => {});
+            generatedCount++;
+            elements.generationCounter.textContent = `已生成 ${generatedCount} 个`;
+            elements.empty.classList.add('hidden');
+          }
         }
-      });
+      }, signal);
 
-      document.addEventListener('keydown', (e) => {
-        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !elements.generateBtn.disabled) {
-          Coordinator.generate();
+      // 如果流结束仍未提取到URL，尝试最后一次
+      if (!urlExtracted) {
+        const finalUrl = Atoms.extractUrl(accText) || accText.trim();
+        if (finalUrl) {
+          const card = Atoms.createPlaceholderVideoCard(finalUrl, prompt);
+          elements.results.prepend(card);
+          Atoms.loadVideoPreview(card, finalUrl);
+          History.save(finalUrl, true, prompt).catch(() => {});
+          generatedCount++;
+          elements.generationCounter.textContent = `已生成 ${generatedCount} 个`;
+          elements.empty.classList.add('hidden');
+        } else {
+          throw new Error('流式结束但未解析到视频链接');
         }
+      }
+    },
+
+    async start() {
+      if (this.running) {
+        this.stop();
+        return;
+      }
+
+      const prompt = elements.prompt.value.trim();
+      if (!prompt) {
+        Atoms.showError('请填写提示词');
+        elements.prompt.focus();
+        return;
+      }
+      if (prompt.length < 2) {
+        Atoms.showError('提示词太短');
+        elements.prompt.focus();
+        return;
+      }
+      if (prompt.length > MAX_PROMPT_LENGTH) {
+        Atoms.showError(`提示词最多 ${MAX_PROMPT_LENGTH} 字符`);
+        return;
+      }
+
+      const selectedModel = elements.model.value;
+      const isVideo = selectedModel.includes('video');
+      const isEdit = selectedModel === 'grok-imagine-1.0-edit';
+
+      if (!Config.isValid(config)) {
+        showConfigModal();
+        Atoms.showError('请先配置 API Base URL');
+        return;
+      }
+
+      if (isEdit && state.images.length === 0) {
+        Atoms.showError('图像编辑模式必须上传至少一张参考图像');
+        return;
+      }
+
+      this.abortController = new AbortController();
+      this.setUI(true);
+
+      elements.generationProgressText.textContent = isVideo
+        ? '视频生成中（流式 / 3并发）...'
+        : '图像生成中（流式 / 2张 / 3并发）...';
+
+      try {
+        if (isVideo) {
+          // 视频：3并发持续生成
+          this.workerPromises = Array.from({ length: MAX_CONCURRENCY }).map(async () => {
+            while (this.running) {
+              try {
+                await this.generateOneVideo(this.abortController.signal);
+              } catch (e) {
+                if (e.name === 'AbortError') break;
+                console.error('视频生成失败:', e);
+                await new Promise(r => setTimeout(r, 1000));
+              }
+              await new Promise(r => setTimeout(r, 150));
+            }
+          });
+          await Promise.all(this.workerPromises);
+        } else {
+          // 图像：3并发持续生成
+          this.workerPromises = Array.from({ length: MAX_CONCURRENCY }).map(async () => {
+            while (this.running) {
+              try {
+                await this.generateOneImageBatch(this.abortController.signal);
+              } catch (e) {
+                if (e.name === 'AbortError') break;
+                console.error('图像生成失败:', e);
+                await new Promise(r => setTimeout(r, 1000));
+              }
+              await new Promise(r => setTimeout(r, 150));
+            }
+          });
+          await Promise.all(this.workerPromises);
+        }
+      } catch (e) {
+        if (e.name !== 'AbortError') {
+          Atoms.showError(e.message || '生成失败');
+        }
+      } finally {
+        this.setUI(false);
+      }
+    }
+  };
+
+  // ==================== 配置弹窗 ====================
+  function showConfigModal() {
+    elements.configBase.value = config.base;
+    elements.configKey.value = config.key;
+    elements.configHistoryKey.value = config.historyKey;
+    elements.configModal.classList.remove('hidden');
+  }
+
+  function hideConfigModal() {
+    elements.configModal.classList.add('hidden');
+  }
+
+  elements.openConfig.addEventListener('click', showConfigModal);
+  elements.saveConfig.addEventListener('click', () => {
+    const newConfig = {
+      base: elements.configBase.value.trim(),
+      key: elements.configKey.value.trim(),
+      historyKey: elements.configHistoryKey.value.trim() || 'grok_imagine_history'
+    };
+    if (!newConfig.base) {
+      Atoms.showError('请填写 Base URL');
+      return;
+    }
+    config = newConfig;
+    HISTORY_KEY = config.historyKey;
+    Config.save(config);
+    hideConfigModal();
+    Atoms.showError('配置已保存');
+  });
+  elements.closeConfig.addEventListener('click', hideConfigModal);
+  elements.configModal.addEventListener('click', (e) => {
+    if (e.target === elements.configModal) hideConfigModal();
+  });
+
+  // ==================== 启动 ====================
+  document.addEventListener('DOMContentLoaded', async () => {
+    videoObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        const video = entry.target;
+        if (entry.isIntersecting) video.play().catch(() => {});
+        else video.pause();
       });
+    }, { threshold: 0.5 });
+
+    if (!Config.isValid(config)) showConfigModal();
+
+    await History.load();
+    InputMolecule.init();
+    InputMolecule.updateCharCount();
+    InputMolecule.updateParams();
+    InputMolecule.updateReferenceLabel();
+    InputMolecule.syncFileInputMultiple();
+
+    elements.generateBtn.addEventListener('click', () => GenerationController.start());
+    elements.stopGenerate.addEventListener('click', () => GenerationController.stop());
+
+    elements.clearHistory.addEventListener('click', async () => {
+      if (confirm('确定要清除所有历史记录吗？')) {
+        await History.clear();
+      }
     });
+
+    document.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        GenerationController.start();
+      }
+      if (e.key === 'Escape' && GenerationController.running) {
+        GenerationController.stop();
+      }
+    });
+  });
   </script>
 </body>
 </html>
