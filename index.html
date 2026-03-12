@@ -1,13 +1,18 @@
 <!DOCTYPE html>
 <html lang="zh-CN" class="dark">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <meta name="theme-color" content="#0A0E1A">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#0B0F1A" media="(prefers-color-scheme: dark)" />
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#0B0F1A" />
   <title>Grok Imagine</title>
 
   <script src="https://cdn.tailwindcss.com"></script>
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" />
   <script src="https://unpkg.com/dexie@4.0.1/dist/dexie.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
@@ -16,12 +21,8 @@
       darkMode: 'class',
       theme: {
         extend: {
-          colors: {
-            primary: '#00E5FF',
-            accent: '#C084FC',
-            bg: '#0A0E1A',
-            panel: '#131C31',
-            card: '#1E293B'
+          fontFamily: {
+            sans: ['ui-sans-serif','system-ui','-apple-system','Segoe UI','Roboto','PingFang SC','Microsoft YaHei','Helvetica Neue','Arial']
           }
         }
       }
@@ -30,122 +31,96 @@
 
   <style>
     * { box-sizing: border-box; }
-    html, body {
-      margin: 0;
-      padding: 0;
-      background: linear-gradient(to bottom, #0A0E1A, #111827);
-      overscroll-behavior: none;
+    html, body { margin: 0; padding: 0; overscroll-behavior: none; }
+    body { min-height: 100vh; min-height: -webkit-fill-available; }
+
+    body { background: #ffffff; color: #0f172a; }
+    html.dark body { background: #0B0F1A; color: #E5E7EB; }
+
+    .glass {
+      background: rgba(255,255,255,0.72);
+      border: 1px solid rgba(148,163,184,0.28);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
     }
-    body {
-      min-height: 100vh;
-      min-height: -webkit-fill-available;
-      display: flex;
-      flex-direction: column;
+    html.dark .glass {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.10);
     }
-    .glass { background: rgba(19,28,49,0.7); backdrop-filter: blur(20px); border: 1px solid rgba(0,229,255,0.2); }
+
+    .btn-gradient { background: linear-gradient(135deg, #00E5FF, #C084FC); color: #0b0f1a; }
+    .btn-gradient:hover { filter: saturate(1.05) brightness(1.02); }
+
+    .spinner { animation: spin 1.2s linear infinite; }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+    #results { columns: 1; column-gap: 1rem; padding: 0.25rem; }
+    @media (min-width: 640px){ #results{ columns: 2; } }
+    @media (min-width: 1024px){ #results{ columns: 3; } }
+    @media (min-width: 1440px){ #results{ columns: 4; } }
+
     .card {
-      transition: all 0.4s ease;
-      position: relative;
       break-inside: avoid;
       display: inline-block;
       width: 100%;
       margin-bottom: 1rem;
+      position: relative;
+      border-radius: 16px;
+      overflow: hidden;
+      transition: transform .2s ease, box-shadow .2s ease;
     }
-    .card:hover { transform: translateY(-10px); box-shadow: 0 25px 50px rgba(0,229,255,0.2); }
-    .card img, .card video { transition: transform 0.6s ease; }
-    .card:hover img, .card:hover video { transform: scale(1.1); }
-    .btn-gradient { background: linear-gradient(135deg, #00E5FF, #C084FC); }
-    .btn-gradient:hover { background: linear-gradient(135deg, #C084FC, #00E5FF); }
-    .spinner { animation: spin 1.2s linear infinite; }
-    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .card:hover { transform: translateY(-5px); box-shadow: 0 20px 60px rgba(15,23,42,0.12); }
+    html.dark .card:hover { box-shadow: 0 20px 70px rgba(0,0,0,0.45); }
 
-    .main-container {
-      flex: 1;
+    .media-wrap {
+      min-height: 240px;
       display: flex;
-      flex-direction: column;
-      overflow-y: auto;
-      -webkit-overflow-scrolling: touch;
-      padding: 0.5rem;
-      padding-top: 4.5rem;
-      padding-bottom: calc(6rem + env(safe-area-inset-bottom, 0));
+      align-items: center;
+      justify-content: center;
+      background: rgba(148,163,184,0.12);
     }
-
-    @media (orientation: landscape) {
-      .main-container { padding: 0; padding-top: 4.5rem; padding-bottom: calc(6rem + env(safe-area-inset-bottom, 0)); }
-      .input-panel { padding: 0.5rem; }
-      .glass { border-radius: 0; }
-    }
+    html.dark .media-wrap { background: rgba(255,255,255,0.06); }
 
     .overlay {
       position: absolute;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      background: linear-gradient(to top, rgba(0,0,0,0.9), transparent);
-      padding: 1.5rem;
+      left: 0; right: 0; bottom: 0;
+      background: linear-gradient(to top, rgba(2,6,23,0.82), rgba(2,6,23,0));
+      padding: 14px;
       opacity: 0;
-      transition: opacity 0.3s;
+      transition: opacity .18s ease;
       pointer-events: none;
     }
     .card:hover .overlay, .card.touched .overlay { opacity: 1; pointer-events: auto; }
     .multi-select-mode .overlay { opacity: 0 !important; pointer-events: none !important; }
 
-    .select-checkbox { opacity: 0; pointer-events: none; transition: opacity 0.3s; }
+    .select-checkbox { opacity: 0; pointer-events: none; transition: opacity .2s ease; }
     .multi-select-mode .select-checkbox { opacity: 1; pointer-events: auto; }
-
-    #results {
-      columns: 1;
-      column-gap: 1.5rem;
-      padding: 1rem 0.5rem;
-    }
-    @media (min-width: 640px) { #results { columns: 2; } }
-    @media (min-width: 1024px) { #results { columns: 3; } }
-    @media (min-width: 1440px) { #results { columns: 4; } }
-    @media (min-width: 1920px) { #results { columns: 5; } }
 
     #selectionBar {
       position: fixed;
-      bottom: env(safe-area-inset-bottom, 0);
-      left: 0;
-      right: 0;
-      background: rgba(19,28,49,0.95);
-      backdrop-filter: blur(12px);
-      padding: 1rem;
-      border-top: 1px solid rgba(0,229,255,0.3);
+      left: 12px; right: 12px;
+      bottom: calc(12px + env(safe-area-inset-bottom, 0));
       z-index: 40;
-      transform: translateY(100%);
-      transition: transform 0.3s ease;
+      transform: translateY(130%);
+      transition: transform .25s ease;
     }
     #selectionBar.show { transform: translateY(0); }
 
-    #clearHistoryWrapper { position: fixed; top: 0.75rem; right: 0.75rem; z-index: 50; }
-
     #generationProgress {
       position: fixed;
-      bottom: 0;
-      left: 0;
-      right: 0;
+      left: 12px; right: 12px;
+      bottom: calc(12px + env(safe-area-inset-bottom, 0));
       z-index: 50;
-      background: rgba(19,28,49,0.9);
-      backdrop-filter: blur(12px);
-      border-top: 1px solid rgba(0,229,255,0.3);
-      padding: 1rem;
-      padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0));
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 1rem;
-      transition: transform 0.3s ease;
-      transform: translateY(100%);
-      flex-wrap: wrap;
+      transform: translateY(130%);
+      transition: transform .25s ease;
     }
     #generationProgress.show { transform: translateY(0); }
 
     .config-modal {
       position: fixed;
       inset: 0;
-      background: rgba(0,0,0,0.85);
-      backdrop-filter: blur(12px);
+      background: rgba(2,6,23,0.55);
+      backdrop-filter: blur(10px);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -154,148 +129,218 @@
 
     #previewGrid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-      gap: 0.75rem;
-      margin-top: 0.5rem;
+      grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+      gap: 10px;
+      margin-top: 10px;
     }
-
     .preview-item {
-      position: relative;
-      border-radius: 1rem;
+      border-radius: 12px;
       overflow: hidden;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+      background: rgba(148,163,184,0.12);
+      border: 1px solid rgba(148,163,184,0.26);
+      aspect-ratio: 1/1;
     }
-    .preview-item img {
-      width: 100%;
+    html.dark .preview-item {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.10);
+    }
+    .preview-item img { width: 100%; height: 100%; object-fit: cover; }
+
+    .video-container video { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+    .video-progress {
+      position: absolute;
+      left: 12px;
+      right: 12px;
+      top: 12px;
+      z-index: 25;
+      border-radius: 14px;
+      padding: 10px 12px;
+      display: none;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .video-progress.show { display: flex; }
+    .video-progress .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+    }
+    .video-progress .progress-bar {
+      height: 6px;
+      background: rgba(255,255,255,0.2);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .video-progress .progress-fill {
       height: 100%;
-      object-fit: cover;
+      width: 0%;
+      background: linear-gradient(90deg, #00E5FF, #C084FC);
+      transition: width 0.3s ease;
     }
 
-    .video-container video {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      display: block;
+    .page-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
     }
+    @media (min-width: 1024px) {
+      .page-grid {
+        grid-template-columns: 420px 1fr;
+        align-items: start;
+      }
+    }
+
+    .panel {
+      padding: 0;
+      border: none;
+      background: transparent;
+      border-radius: 0;
+    }
+
+    .field {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(148,163,184,0.26);
+      background: rgba(255,255,255,0.55);
+      outline: none;
+    }
+    html.dark .field {
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.06);
+      color: #E5E7EB;
+    }
+    .field:focus {
+      box-shadow: 0 0 0 3px rgba(34,211,238,0.25);
+      border-color: rgba(34,211,238,0.4);
+    }
+    textarea.field { resize: none; }
+
+    .soft-btn {
+      padding: 10px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(148,163,184,0.26);
+      background: rgba(255,255,255,0.55);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      font-weight: 700;
+    }
+    html.dark .soft-btn {
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.06);
+      color: #E5E7EB;
+    }
+    .soft-btn:hover { filter: brightness(1.02); }
+
+    .danger-btn {
+      padding: 10px 14px;
+      border-radius: 14px;
+      background: #DC2626;
+      color: #fff;
+      font-weight: 800;
+    }
+    .danger-btn:hover { background: #B91C1C; }
   </style>
 </head>
 
-<body class="text-gray-100 flex flex-col">
-
-  <!-- 配置弹窗 -->
-  <div id="configModal" class="config-modal hidden">
-    <div class="glass rounded-3xl p-8 max-w-md w-full mx-4 shadow-2xl">
-      <h2 class="text-2xl font-bold mb-6 text-center"><i class="fas fa-cog mr-2 text-primary"></i> API 配置</h2>
-
-      <div class="mb-5">
-        <label class="block text-sm font-medium mb-2">API Base URL <span class="text-red-400">*</span></label>
-        <input id="configBase" type="url" placeholder="http://localhost:8000"
-               class="w-full px-4 py-3 bg-panel rounded-2xl border border-gray-700 focus:border-primary focus:outline-none">
+<body class="text-slate-900 dark:text-gray-100">
+  <div class="max-w-[1400px] mx-auto px-4 pt-5 pb-3">
+    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-2xl btn-gradient flex items-center justify-center shadow-sm">
+          <i class="fas fa-wand-magic-sparkles"></i>
+        </div>
+        <div>
+          <div class="text-xl font-extrabold tracking-tight">Grok Imagine</div>
+          <div class="text-xs text-slate-500 dark:text-gray-400">图像 / 编辑 / 变体 / 视频</div>
+        </div>
       </div>
 
-      <div class="mb-5">
-        <label class="block text-sm font-medium mb-2">API Key（可选）</label>
-        <input id="configKey" type="password" placeholder="Bearer token（可留空）"
-               class="w-full px-4 py-3 bg-panel rounded-2xl border border-gray-700 focus:border-primary focus:outline-none">
+      <div class="flex items-center gap-2 flex-wrap justify-end">
+        <button id="openConfig" class="soft-btn">
+          <i class="fas fa-gear mr-2"></i>配置
+        </button>
+        <button id="themeToggle" class="soft-btn">
+          <i id="themeIcon" class="fas fa-circle-half-stroke mr-2"></i><span id="themeText">跟随系统</span>
+        </button>
+        <button id="clearHistory" class="danger-btn">
+          <i class="fas fa-trash mr-2"></i>清除历史
+        </button>
       </div>
-
-      <div class="mb-6">
-        <label class="block text-sm font-medium mb-2">历史记录 Key（可选）</label>
-        <input id="configHistoryKey" type="text" placeholder="grok_imagine_history"
-               class="w-full px-4 py-3 bg-panel rounded-2xl border border-gray-700 focus:border-primary focus:outline-none">
-      </div>
-
-      <div class="flex gap-3">
-        <button id="saveConfig" class="flex-1 py-3 btn-gradient rounded-2xl font-bold shadow-lg">保存并继续</button>
-        <button id="closeConfig" class="flex-1 py-3 bg-gray-700 rounded-2xl font-bold">取消</button>
-      </div>
-
-      <p class="text-xs text-gray-400 text-center mt-4">配置仅保存在你的浏览器本地</p>
     </div>
   </div>
 
-  <!-- 左上角配置按钮 -->
-  <div class="fixed top-3 left-3 z-50">
-    <button id="openConfig" class="px-5 py-3 bg-panel/80 hover:bg-panel rounded-xl text-base font-medium shadow-lg">
-      <i class="fas fa-cog text-xl"></i>
-    </button>
-  </div>
-
-  <!-- 右上角清空历史 -->
-  <div id="clearHistoryWrapper">
-    <button id="clearHistory" class="px-5 py-3 bg-red-600/80 hover:bg-red-700 rounded-xl text-base font-medium shadow-lg">
-      <i class="fas fa-trash mr-2"></i> 清除历史
-    </button>
-  </div>
-
-  <!-- 主体 -->
-  <div class="main-container">
-    <div class="input-panel">
-      <div class="glass rounded-3xl p-6 flex flex-col shadow-2xl">
-        <div class="mb-5">
-          <label class="flex items-center text-base font-medium mb-2">
-            <i class="fas fa-robot mr-2 text-primary"></i> 模型
-          </label>
-          <select id="model" class="w-full px-4 py-3 bg-panel rounded-2xl border border-gray-700 focus:border-primary focus:outline-none text-base">
-            <option value="grok-imagine-1.0" selected>grok-imagine-1.0（图像生成 / 变体）</option>
-            <option value="grok-imagine-1.0-edit">grok-imagine-1.0-edit（图像编辑）</option>
-            <option value="grok-imagine-1.0-video">grok-imagine-1.0-video（视频生成）</option>
-          </select>
-          <p class="text-xs text-gray-400 mt-2">默认无限流式生成（3并发，每批2张），点击“停止”结束。</p>
+  <div class="max-w-[1400px] mx-auto px-4 pb-4">
+    <div class="page-grid">
+      <section class="panel">
+        <div class="flex items-center justify-between mb-3">
+          <div class="font-extrabold text-base">生成设置</div>
+          <div class="text-xs text-slate-500 dark:text-gray-400">Ctrl/⌘ + Enter 生成</div>
         </div>
 
-        <div class="mb-5">
-          <label class="flex items-center text-base font-medium mb-2">
-            <i class="fas fa-pen-nib mr-2 text-primary"></i> 提示词
-          </label>
-          <textarea id="prompt" rows="6" placeholder="输入详细描述..." maxlength="1000"
-                    class="w-full px-4 py-3 bg-panel rounded-2xl border border-gray-700 focus:border-primary resize-none text-base"></textarea>
-          <div class="text-right text-xs text-gray-400 mt-2">已用 <span id="charCount">0</span> / 1000</div>
-        </div>
+        <div class="space-y-3">
+          <div>
+            <label class="text-sm font-semibold mb-2 block">模型</label>
+            <select id="model" class="field">
+              <option value="grok-imagine-1.0" selected>grok-imagine-1.0（图像生成 / 变体）</option>
+              <option value="grok-imagine-1.0-fast">grok-imagine-1.0-fast（图像生成 / 变体·快）</option>
+              <option value="grok-imagine-1.0-edit">grok-imagine-1.0-edit（图像编辑）</option>
+              <option value="grok-imagine-1.0-video">grok-imagine-1.0-video（视频生成）</option>
+            </select>
+          </div>
 
-        <div class="flex flex-col lg:flex-row gap-6 mb-5">
-          <div class="flex-1 min-w-0">
-            <label id="referenceLabel" class="flex items-center text-base font-medium mb-2">
-              <i class="fas fa-image mr-2 text-primary"></i> 参考图像（可选）
-            </label>
-            <input type="file" id="inputImage" accept="image/*" multiple
-                   class="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-xl file:bg-primary file:text-black file:font-bold file:border-0">
-            <div id="previewContainer" class="mt-4 relative" style="display:none;">
-              <div class="bg-panel/70 rounded-3xl p-4 shadow-2xl overflow-hidden">
-                <div id="previewGrid"></div>
-                <div class="text-xs text-gray-400 mt-2 text-center">已上传 <span id="imageCount">0</span> 张</div>
-              </div>
-              <button id="clearImage" class="absolute top-6 right-6 bg-red-600 hover:bg-red-700 rounded-full p-3 text-white shadow-lg">
-                <i class="fas fa-times text-xl"></i>
-              </button>
+          <div>
+            <label class="text-sm font-semibold mb-2 block">提示词</label>
+            <textarea id="prompt" rows="6" maxlength="1000" placeholder="输入详细描述..." class="field"></textarea>
+            <div class="flex items-center justify-between mt-2 text-xs text-slate-500 dark:text-gray-400">
+              <span>已用 <span id="charCount">0</span> / 1000</span>
+              <span>Esc 停止</span>
             </div>
           </div>
 
-          <div class="flex-1 min-w-0">
-            <!-- 图片参数 -->
-            <div id="imageParams" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label id="referenceLabel" class="text-sm font-semibold mb-2 block">参考图（可选）</label>
+            <input type="file" id="inputImage" accept="image/*" multiple
+              class="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-xl file:bg-cyan-300 file:text-slate-900 file:font-extrabold file:border-0" />
+
+            <div id="previewContainer" class="mt-3 hidden">
+              <div class="p-3 border border-slate-200/70 dark:border-white/10 rounded-xl bg-white/30 dark:bg-white/5">
+                <div class="flex items-center justify-between">
+                  <div class="text-sm font-bold">预览</div>
+                  <div class="text-xs text-slate-500 dark:text-gray-400">已上传 <span id="imageCount">0</span> 张</div>
+                </div>
+                <div id="previewGrid"></div>
+              </div>
+              <button id="clearImage" class="mt-2 danger-btn">清除参考图</button>
+            </div>
+          </div>
+
+          <div>
+            <div id="imageParams" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div class="sm:col-span-2">
-                <label class="block text-sm mb-1 text-gray-400">图片尺寸 size</label>
-                <select id="imageSize" class="w-full px-3 py-2 bg-panel rounded-xl border border-gray-700 text-sm">
-                  <option value="1024x1024">1024x1024（1:1）</option>
-                  <option value="1024x1792" selected>1024x1792（9:16 竖屏）</option>
-                  <option value="1792x1024">1792x1024（16:9 横屏）</option>
-                  <option value="720x1280">720x1280（9:16 竖屏）</option>
-                  <option value="1280x720">1280x720（16:9 横屏）</option>
+                <label class="block text-xs font-semibold text-slate-500 dark:text-gray-400 mb-1">画幅比例</label>
+                <select id="imageSize" class="field">
+                  <option value="1024x1024">1:1（方图）</option>
+                  <option value="1024x1792" selected>9:16（竖图）</option>
+                  <option value="1792x1024">16:9（横图）</option>
+                  <option value="720x1280">9:16（竖图·小）</option>
+                  <option value="1280x720">16:9（横图·小）</option>
                 </select>
               </div>
 
               <div>
-                <label class="block text-sm mb-1 text-gray-400">响应格式 response_format</label>
-                <select id="responseFormat" class="w-full px-3 py-2 bg-panel rounded-xl border border-gray-700 text-sm">
+                <label class="block text-xs font-semibold text-slate-500 dark:text-gray-400 mb-1">response_format</label>
+                <select id="responseFormat" class="field">
                   <option value="url">url</option>
                   <option value="b64_json" selected>b64_json</option>
                 </select>
               </div>
 
               <div id="strengthParam" class="hidden">
-                <label class="block text-sm mb-1 text-gray-400">变化强度 strength</label>
-                <select id="strength" class="w-full px-3 py-2 bg-panel rounded-xl border border-gray-700 text-sm">
+                <label class="block text-xs font-semibold text-slate-500 dark:text-gray-400 mb-1">strength</label>
+                <select id="strength" class="field">
                   <option value="0.3">0.3</option>
                   <option value="0.5">0.5</option>
                   <option value="0.75" selected>0.75</option>
@@ -304,22 +349,21 @@
               </div>
             </div>
 
-            <!-- 视频参数（严格对齐 /v1/videos：model,prompt,size,seconds,quality,[input_reference]） -->
-            <div id="videoParams" class="grid grid-cols-1 sm:grid-cols-2 gap-4 hidden">
+            <div id="videoParams" class="grid grid-cols-1 sm:grid-cols-2 gap-3 hidden">
               <div class="sm:col-span-2">
-                <label class="block text-sm mb-1 text-gray-400">画面比例 size</label>
-                <select id="videoSize" class="w-full px-3 py-2 bg-panel rounded-xl border border-gray-700 text-sm">
-                  <option value="1024x1024">1024x1024（1:1）</option>
-                  <option value="1024x1792" selected>1024x1792（9:16 竖屏）</option>
-                  <option value="1792x1024">1792x1024（16:9 横屏）</option>
-                  <option value="720x1280">720x1280（9:16 竖屏）</option>
-                  <option value="1280x720">1280x720（16:9 横屏）</option>
+                <label class="block text-xs font-semibold text-slate-500 dark:text-gray-400 mb-1">画幅比例</label>
+                <select id="videoSize" class="field">
+                  <option value="1024x1024">1:1（方图）</option>
+                  <option value="1024x1792" selected>9:16（竖屏）</option>
+                  <option value="1792x1024">16:9（横屏）</option>
+                  <option value="720x1280">9:16（竖屏·小）</option>
+                  <option value="1280x720">16:9（横屏·小）</option>
                 </select>
               </div>
 
               <div>
-                <label class="block text-sm mb-1 text-gray-400">时长 seconds</label>
-                <select id="videoSeconds" class="w-full px-3 py-2 bg-panel rounded-xl border border-gray-700 text-sm">
+                <label class="block text-xs font-semibold text-slate-500 dark:text-gray-400 mb-1">seconds</label>
+                <select id="videoSeconds" class="field">
                   <option value="6" selected>6</option>
                   <option value="10">10</option>
                   <option value="15">15</option>
@@ -330,63 +374,92 @@
               </div>
 
               <div>
-                <label class="block text-sm mb-1 text-gray-400">分辨率（quality）</label>
-                <select id="videoQuality" class="w-full px-3 py-2 bg-panel rounded-xl border border-gray-700 text-sm">
-                  <option value="standard" selected>480p（standard）</option>
-                  <option value="high">720p（high）</option>
+                <label class="block text-xs font-semibold text-slate-500 dark:text-gray-400 mb-1">quality</label>
+                <select id="videoQuality" class="field">
+                  <option value="standard">standard</option>
+                  <option value="high" selected>high</option>
                 </select>
               </div>
             </div>
           </div>
+
+          <button id="generateBtn" class="w-full py-4 btn-gradient rounded-2xl font-extrabold text-lg">
+            <i class="fas fa-magic mr-2"></i>生成
+          </button>
         </div>
+      </section>
 
-        <button id="generateBtn"
-                class="w-full py-5 text-xl font-bold btn-gradient rounded-2xl shadow-2xl hover:scale-105 transition disabled:opacity-50">
-          <i class="fas fa-magic mr-2"></i> 生成
-        </button>
-      </div>
-    </div>
-
-    <!-- 结果区 -->
-    <div class="results-section flex-1 flex flex-col">
-      <div id="selectionBar" class="hidden">
-        <div class="flex items-center justify-between px-4">
-          <span class="text-lg">已选中 <span id="selectedCount">0</span> 个</span>
-          <div class="flex gap-3">
-            <button id="selectAll" class="px-5 py-2 bg-gray-700 rounded-xl text-sm font-medium">全选</button>
-            <button id="downloadSelected" class="px-5 py-2 btn-gradient rounded-xl text-sm font-medium">
-              <i class="fas fa-download mr-1"></i> 下载选中
-            </button>
-            <button id="cancelSelection" class="px-5 py-2 bg-gray-700 rounded-xl text-sm font-medium">取消</button>
-          </div>
+      <section class="panel">
+        <div class="flex items-center justify-between mb-3">
+          <div class="font-extrabold text-base">结果</div>
+          <div class="text-xs text-slate-500 dark:text-gray-400">双击卡片进入多选</div>
         </div>
-      </div>
-
-      <div class="flex-1">
         <div id="results"></div>
-        <div id="empty" class="text-center py-20 text-gray-500 flex-1 flex flex-col items-center justify-center">
-          <i class="fas fa-sparkles text-6xl mb-4 opacity-20"></i>
-          <p class="text-lg">结果将显示在这里</p>
+        <div id="empty" class="text-center py-20 text-slate-500 dark:text-gray-500">
+          <i class="fas fa-sparkles text-5xl mb-4 opacity-20"></i>
+          <p class="text-base">结果将显示在这里</p>
         </div>
+      </section>
+    </div>
+  </div>
+
+  <div id="selectionBar" class="hidden">
+    <div class="glass rounded-2xl p-3 flex items-center justify-between gap-3">
+      <div class="font-semibold">已选中 <span id="selectedCount">0</span> 个</div>
+      <div class="flex gap-2 flex-wrap justify-end">
+        <button id="selectAll" class="soft-btn">全选</button>
+        <button id="downloadSelected" class="px-4 py-2 btn-gradient rounded-xl text-sm font-extrabold">
+          <i class="fas fa-download mr-1"></i>下载
+        </button>
+        <button id="cancelSelection" class="soft-btn">取消</button>
       </div>
     </div>
   </div>
 
-  <!-- 底部进度条 -->
   <div id="generationProgress">
-    <i class="fas fa-spinner spinner text-3xl text-primary"></i>
-    <p id="generationProgressText" class="text-lg font-medium">生成中...</p>
-    <span id="generationCounter" class="text-sm bg-panel px-3 py-1 rounded-full">已生成 0 个</span>
-    <span id="generationTimer" class="text-sm bg-panel px-3 py-1 rounded-full">总耗时 0s</span>
-    <button id="stopGenerate" class="px-4 py-2 bg-red-600/80 hover:bg-red-700 rounded-xl text-sm font-medium">
-      <i class="fas fa-stop mr-1"></i> 停止
-    </button>
+    <div class="glass rounded-2xl p-3 flex items-center justify-center gap-3 flex-wrap">
+      <i class="fas fa-spinner spinner text-xl"></i>
+      <p id="generationProgressText" class="font-semibold">生成中...</p>
+      <span id="generationCounter" class="text-xs px-3 py-1 rounded-full bg-white/50 dark:bg-white/5 border border-slate-200/70 dark:border-white/10">已生成 0 个</span>
+      <span id="generationTimer" class="text-xs px-3 py-1 rounded-full bg-white/50 dark:bg-white/5 border border-slate-200/70 dark:border-white/10">总耗时 0s</span>
+      <button id="stopGenerate" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-semibold">
+        <i class="fas fa-stop mr-1"></i>停止
+      </button>
+    </div>
   </div>
 
-  <!-- 错误提示 -->
   <div id="error" class="fixed bottom-20 left-1/2 -translate-x-1/2 hidden z-50 max-w-[90vw]">
-    <div class="bg-red-900/90 rounded-2xl px-6 py-4 text-base shadow-2xl">
+    <div class="bg-red-900/90 rounded-2xl px-5 py-3 text-base shadow-2xl text-white">
       <i class="fas fa-exclamation-triangle mr-2"></i> <span id="errorText"></span>
+    </div>
+  </div>
+
+  <div id="configModal" class="config-modal hidden">
+    <div class="glass p-6 w-full max-w-md mx-4 rounded-2xl">
+      <div class="flex items-center justify-between mb-4">
+        <div class="text-lg font-extrabold">API 配置</div>
+        <button id="closeConfig" class="soft-btn"><i class="fas fa-xmark"></i></button>
+      </div>
+
+      <div class="mb-4">
+        <label class="block text-sm font-semibold mb-2">API Base URL</label>
+        <input id="configBase" type="url" placeholder="http://localhost:8000" class="field" />
+      </div>
+
+      <div class="mb-4">
+        <label class="block text-sm font-semibold mb-2">API Key（可选）</label>
+        <input id="configKey" type="password" placeholder="Bearer token（可留空）" class="field" />
+      </div>
+
+      <div class="mb-5">
+        <label class="block text-sm font-semibold mb-2">历史记录 Key（可选）</label>
+        <input id="configHistoryKey" type="text" placeholder="grok_imagine_history" class="field" />
+      </div>
+
+      <div class="flex gap-2">
+        <button id="saveConfig" class="flex-1 py-3 btn-gradient rounded-xl font-extrabold">保存</button>
+        <button id="cancelConfig" class="flex-1 py-3 soft-btn">取消</button>
+      </div>
     </div>
   </div>
 
@@ -396,11 +469,10 @@
   const MAX_PROMPT_LENGTH = 1000;
   const FIXED_IMAGE_N = 2;
   const MAX_CONCURRENCY = 3;
+  const MIN_BYTES = 50 * 1024;
 
   const db = new Dexie('GrokImagineDB');
-  db.version(1).stores({
-    history: '++id, url, isVideo, prompt, timestamp'
-  });
+  db.version(1).stores({ history: '++id, url, isVideo, prompt, timestamp' });
 
   let videoObserver;
 
@@ -414,23 +486,66 @@
         key: params.get('key') || '',
         historyKey: params.get('historyKey') || this.defaults.historyKey
       };
-      if (fromUrl.base) {
-        this.save(fromUrl);
-        return fromUrl;
-      }
+      if (fromUrl.base) { this.save(fromUrl); return fromUrl; }
       try {
         const saved = localStorage.getItem(this.storageKey);
         if (saved) return { ...this.defaults, ...JSON.parse(saved) };
-      } catch (e) {}
+      } catch (_) {}
       return { ...this.defaults };
     },
-    save(config) {
-      try { localStorage.setItem(this.storageKey, JSON.stringify(config)); } catch (e) {}
-    },
+    save(config) { try { localStorage.setItem(this.storageKey, JSON.stringify(config)); } catch (_) {} },
     isValid(config) { return !!(config.base && config.base.trim()); }
   };
-
   let config = Config.load();
+
+  const Theme = {
+    storageKey: 'grok_imagine_theme',
+    mode: 'system',
+    mql: null,
+    load() {
+      try {
+        const v = localStorage.getItem(this.storageKey);
+        if (v === 'system' || v === 'dark' || v === 'light') this.mode = v;
+      } catch (_) {}
+    },
+    save() { try { localStorage.setItem(this.storageKey, this.mode); } catch (_) {} },
+    systemPrefersDark() { return !!(this.mql && this.mql.matches); },
+    appliedIsDark() {
+      if (this.mode === 'dark') return true;
+      if (this.mode === 'light') return false;
+      return this.systemPrefersDark();
+    },
+    apply() {
+      const isDark = this.appliedIsDark();
+      document.documentElement.classList.toggle('dark', isDark);
+
+      // iOS/Safari 可能会优先使用带 media 的 theme-color；
+      // 手动切换不改变 prefers-color-scheme，所以需要同时更新所有 theme-color meta。
+      const metas = Array.from(document.querySelectorAll('meta[name="theme-color"]'));
+      metas.forEach(m => m.setAttribute('content', isDark ? '#0B0F1A' : '#ffffff'));
+
+      elements.themeText.textContent = (this.mode === 'system') ? '跟随系统' : (this.mode === 'dark' ? '深色' : '浅色');
+      elements.themeIcon.className = 'fas mr-2 ' + (
+        this.mode === 'system' ? 'fa-circle-half-stroke' :
+        this.mode === 'dark' ? 'fa-moon' : 'fa-sun'
+      );
+    },
+    cycle() {
+      this.mode = (this.mode === 'system') ? 'dark' : (this.mode === 'dark' ? 'light' : 'system');
+      this.save();
+      this.apply();
+    },
+    init() {
+      this.mql = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+      this.load();
+      this.apply();
+      if (this.mql) {
+        const handler = () => { if (this.mode === 'system') this.apply(); };
+        if (this.mql.addEventListener) this.mql.addEventListener('change', handler);
+        else if (this.mql.addListener) this.mql.addListener(handler);
+      }
+    }
+  };
 
   const elements = {
     model: document.getElementById('model'),
@@ -481,7 +596,12 @@
     configHistoryKey: document.getElementById('configHistoryKey'),
     saveConfig: document.getElementById('saveConfig'),
     closeConfig: document.getElementById('closeConfig'),
-    openConfig: document.getElementById('openConfig')
+    cancelConfig: document.getElementById('cancelConfig'),
+    openConfig: document.getElementById('openConfig'),
+
+    themeToggle: document.getElementById('themeToggle'),
+    themeIcon: document.getElementById('themeIcon'),
+    themeText: document.getElementById('themeText')
   };
 
   const state = { images: [] };
@@ -489,6 +609,28 @@
   let generatedCount = 0;
   let generationStartTime = null;
   let timerInterval = null;
+
+  function base64BytesLen(b64) {
+    if (!b64 || typeof b64 !== 'string') return 0;
+    const s = b64.startsWith('data:') ? (b64.split(',')[1] || '') : b64;
+    const padding = (s.endsWith('==') ? 2 : (s.endsWith('=') ? 1 : 0));
+    return Math.max(0, Math.floor(s.length * 3 / 4) - padding);
+  }
+
+  async function urlBytesLen(url, signal) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 8000);
+    try {
+      const res = await fetch(url, { mode: 'cors', cache: 'no-store', signal: signal || ctrl.signal });
+      if (!res.ok) return 0;
+      const blob = await res.blob();
+      return blob.size || 0;
+    } catch {
+      return 0;
+    } finally {
+      clearTimeout(t);
+    }
+  }
 
   function extractFilenameFromUrl(url) {
     if (!url || typeof url !== 'string') return null;
@@ -499,7 +641,7 @@
       let filename = pathname.split('/').pop();
       if (filename && filename.includes('.')) {
         filename = filename.split('?')[0].split('#')[0];
-        try { filename = decodeURIComponent(filename); } catch (e) {}
+        try { filename = decodeURIComponent(filename); } catch (_) {}
         filename = filename.replace(/[<>:"/\\|?*]/g, '_');
         return filename;
       }
@@ -560,7 +702,7 @@
       a.click();
       document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
-    } catch (e) {
+    } catch (_) {
       const a = document.createElement('a');
       a.href = url;
       a.download = filename;
@@ -568,7 +710,6 @@
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      Atoms.showError('若未开始下载，请右键选择“另存为”');
     }
   }
 
@@ -625,8 +766,6 @@
       a.click();
       document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(zipUrl), 2000);
-
-      if (fail > 0) Atoms.showError(`完成：成功 ${ok}，失败 ${fail}`);
     } finally {
       elements.downloadSelected.innerHTML = original;
       elements.downloadSelected.disabled = false;
@@ -694,14 +833,14 @@
           else Atoms.loadImagePreview(card, item.url);
         });
         if (items.length > 0) elements.empty.classList.add('hidden');
-      } catch (e) { console.error(e); }
+      } catch (e) {}
     },
     async save(url, isVideo, prompt) {
       try {
         const existing = await db.history.where('url').equals(url).first();
         if (existing) return;
         await db.history.add({ url, isVideo, prompt: (prompt || '').substring(0, 200), timestamp: Date.now() });
-      } catch (e) { console.error(e); }
+      } catch (e) {}
     },
     async clear() {
       await db.history.clear();
@@ -715,7 +854,7 @@
 
   const Atoms = {
     apiBaseV1() {
-      if (!Config.isValid(config)) throw new Error('请先配置 API Base URL');
+      if (!Config.isValid(config)) throw new Error('请先配置 Base URL');
       let base = (config.base || '').trim().replace(/\/+$/, '');
       if (base.endsWith('/v1')) return base;
       return base + '/v1';
@@ -727,14 +866,50 @@
       if (config.key && config.key.trim()) headers['Authorization'] = `Bearer ${config.key.trim()}`;
       return headers;
     },
+    showError(message) {
+      elements.errorText.textContent = message;
+      elements.error.classList.remove('hidden');
+      setTimeout(() => elements.error.classList.add('hidden'), 5000);
+    },
+    // ---------- extractUrl：能去掉尾部标点、处理 Markdown、拼接相对路径 ----------
     extractUrl(content) {
-      if (!content || typeof content !== 'string') return null;
-      content = content.replace(/```[\s\S]*?```/g, '').trim();
-      if (content.startsWith('http') || content.startsWith('/')) return content;
-      const m1 = content.match(/!\[([^\]]*)\]\((https?:\/\/[^\)]+)\)/);
-      if (m1) return m1[2];
-      const m2 = content.match(/(https?:\/\/[^\s<>"{}|\\^`]+)/);
-      if (m2) return m2[1];
+      if (!content) return null;
+
+      const cleanUrl = (u) => {
+        if (!u || typeof u !== 'string') return null;
+        u = u.trim();
+        u = u.replace(/^["'(<[]+/, '');
+        u = u.replace(/[\s"'>)\],.]+$/, '');
+        if (!u) return null;
+        return u;
+      };
+
+      const normalize = (u) => {
+        const cleaned = cleanUrl(u);
+        if (!cleaned) return null;
+        if (cleaned.startsWith('http://') || cleaned.startsWith('https://') || cleaned.startsWith('data:')) return cleaned;
+        if (cleaned.startsWith('/')) {
+          const base = (config.base || '').trim().replace(/\/+$/, '');
+          return base ? (base + cleaned) : cleaned;
+        }
+        return null;
+      };
+
+      if (typeof content !== 'string') {
+        try { content = JSON.stringify(content); } catch { return null; }
+      }
+
+      const s = content.replace(/```[\s\S]*?```/g, '').trim();
+
+      const mdImg = s.match(/!\[[^\]]*]\((https?:\/\/[^)\s]+)\)/i);
+      if (mdImg) return normalize(mdImg[1]);
+
+      const mHttp = s.match(/https?:\/\/[^\s<>"{}|\\^`]*/i);
+      if (mHttp) return normalize(mHttp[0]);
+
+      const mRel = s.match(/\/[^\s<>"{}|\\^`]*\.(png|jpg|jpeg|webp|gif)/i);
+      if (mRel) return normalize(mRel[0]);
+
       return null;
     },
     fileToDataUrl(file) {
@@ -744,11 +919,6 @@
         r.onerror = reject;
         r.readAsDataURL(file);
       });
-    },
-    showError(message) {
-      elements.errorText.textContent = message;
-      elements.error.classList.remove('hidden');
-      setTimeout(() => elements.error.classList.add('hidden'), 5000);
     },
     async apiPostStream(endpoint, payload, onEvent, signal) {
       const isForm = payload instanceof FormData;
@@ -770,15 +940,12 @@
         const reader = res.body.getReader();
         const decoder = new TextDecoder('utf-8');
         let buffer = '';
-
         while (true) {
           const { value, done } = await reader.read();
           if (done) break;
-
           buffer += decoder.decode(value, { stream: true });
           let lines = buffer.split('\n');
           buffer = lines.pop();
-
           for (const line of lines) {
             if (!line.startsWith('data:')) continue;
             const data = line.slice(5).trim();
@@ -791,58 +958,69 @@
         onEvent({ data: await res.json() });
       }
     },
-    async apiPostJson(endpoint, body, signal) {
-      const res = await fetch(this.buildUrl(endpoint), {
-        method: 'POST',
-        headers: this.buildHeaders(true),
-        body: JSON.stringify(body),
-        signal
-      });
+    apiPostFormWithProgress(endpoint, formData, onProgress, signal) {
+      return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', this.buildUrl(endpoint), true);
+        const headers = this.buildHeaders(false);
+        for (let [k, v] of Object.entries(headers)) {
+          xhr.setRequestHeader(k, v);
+        }
+        xhr.responseType = 'text';
 
-      if (!res.ok) {
-        let msg = `请求失败: HTTP ${res.status}`;
-        try { msg = (await res.json())?.error?.message || msg; } catch (_) {}
-        throw new Error(msg);
-      }
-      return await res.json();
-    },
-    async apiPostForm(endpoint, formData, signal) {
-      const res = await fetch(this.buildUrl(endpoint), {
-        method: 'POST',
-        headers: this.buildHeaders(false),
-        body: formData,
-        signal
-      });
+        if (onProgress) {
+          xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable) {
+              const pct = Math.round((e.loaded / e.total) * 100);
+              onProgress(pct);
+            }
+          };
+        }
 
-      if (!res.ok) {
-        let msg = `请求失败: HTTP ${res.status}`;
-        try { msg = (await res.json())?.error?.message || msg; } catch (_) {}
-        throw new Error(msg);
-      }
-      const ct = res.headers.get('Content-Type') || '';
-      if (ct.includes('application/json')) return await res.json();
-      const t = await res.text();
-      try { return JSON.parse(t); } catch { return { url: t.trim() }; }
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              resolve(JSON.parse(xhr.responseText));
+            } catch {
+              resolve({ url: xhr.responseText.trim() });
+            }
+          } else {
+            let msg = `请求失败: HTTP ${xhr.status}`;
+            try { msg = JSON.parse(xhr.responseText)?.error?.message || msg; } catch (_) {}
+            reject(new Error(msg));
+          }
+        };
+
+        xhr.onerror = () => reject(new Error('网络错误'));
+        xhr.onabort = () => reject(Object.assign(new Error('AbortError'), { name: 'AbortError' }));
+
+        if (signal) {
+          if (signal.aborted) { xhr.abort(); return; }
+          signal.addEventListener('abort', () => xhr.abort(), { once: true });
+        }
+
+        xhr.send(formData);
+      });
     },
     createPlaceholderCard(url, prompt) {
       const card = document.createElement('div');
-      card.className = 'card rounded-2xl glass overflow-hidden relative';
+      card.className = 'card glass';
       card.dataset.url = url || '';
       card.dataset.prompt = prompt || '';
       card.dataset.isVideo = 'false';
 
       card.innerHTML = `
-        <input type="checkbox" class="select-checkbox absolute top-4 left-4 z-20 w-6 h-6 accent-primary rounded cursor-pointer">
-        <div class="image-placeholder bg-panel/50 flex items-center justify-center relative overflow-hidden min-h-64">
-          <i class="fas fa-spinner spinner text-5xl text-primary"></i>
+        <input type="checkbox" class="select-checkbox absolute top-3 left-3 z-20 w-5 h-5 accent-cyan-400 rounded cursor-pointer">
+        <div class="media-wrap image-placeholder relative overflow-hidden">
+          <i class="fas fa-spinner spinner text-4xl"></i>
         </div>
         <div class="overlay">
-          <div class="text-xs text-gray-300 mb-2 line-clamp-2">${prompt || ''}</div>
-          <button type="button" class="single-download block text-center py-3 btn-gradient rounded-xl text-black font-bold text-sm w-full mb-2">
-            <i class="fas fa-download mr-1"></i> 下载图像
+          <div class="text-xs text-white/85 mb-2 line-clamp-2">${prompt || ''}</div>
+          <button type="button" class="single-download block text-center py-2 btn-gradient rounded-xl font-extrabold text-sm w-full mb-2">
+            <i class="fas fa-download mr-1"></i>下载
           </button>
-          <button type="button" class="copy-prompt-btn block text-center py-2 bg-panel rounded-xl text-white text-xs w-full hover:bg-panel/80">
-            <i class="fas fa-copy mr-1"></i> 复制提示词
+          <button type="button" class="copy-prompt-btn block text-center py-2 bg-white/10 hover:bg-white/15 border border-white/15 rounded-xl text-white text-xs w-full">
+            <i class="fas fa-copy mr-1"></i>复制提示词
           </button>
         </div>
       `;
@@ -851,27 +1029,40 @@
     },
     createPlaceholderVideoCard(url, prompt) {
       const card = document.createElement('div');
-      card.className = 'card rounded-2xl glass overflow-hidden relative';
+      card.className = 'card glass';
       card.dataset.url = url || '';
       card.dataset.prompt = prompt || '';
       card.dataset.isVideo = 'true';
+      // pending：停止/中断时需要移除未完成卡片；成功拿到 url 后会标记为 done
+      card.dataset.status = 'pending';
 
       card.innerHTML = `
-        <input type="checkbox" class="select-checkbox absolute top-4 left-4 z-20 w-6 h-6 accent-primary rounded cursor-pointer">
-        <div class="aspect-video bg-panel/50 flex items-center justify-center relative overflow-hidden video-container">
-          <i class="fas fa-spinner spinner text-5xl text-primary"></i>
+        <div class="video-progress glass" data-video-progress>
+          <div class="row">
+            <div class="left">
+              <i class="fas fa-circle-notch spinner"></i>
+              <span class="ml-2 font-bold">视频任务</span>
+            </div>
+            <span data-vpct>0%</span>
+          </div>
+          <div class="progress-bar"><div class="progress-fill" style="width:0%"></div></div>
+        </div>
+
+        <input type="checkbox" class="select-checkbox absolute top-3 left-3 z-20 w-5 h-5 accent-cyan-400 rounded cursor-pointer">
+        <div class="media-wrap video-container relative overflow-hidden">
+          <i class="fas fa-spinner spinner text-4xl"></i>
         </div>
         <div class="overlay">
-          <div class="text-xs text-gray-300 mb-2 line-clamp-2">${prompt || ''}</div>
-          <button type="button" class="single-download block text-center py-3 btn-gradient rounded-xl text-black font-bold text-sm w-full mb-2">
-            <i class="fas fa-download mr-1"></i> 下载视频
+          <div class="text-xs text-white/85 mb-2 line-clamp-2">${prompt || ''}</div>
+          <button type="button" class="single-download block text-center py-2 btn-gradient rounded-xl font-extrabold text-sm w-full mb-2">
+            <i class="fas fa-download mr-1"></i>下载
           </button>
           <div class="grid grid-cols-2 gap-2">
-            <button type="button" class="copy-url-btn block text-center py-2 bg-panel rounded-xl text-white text-xs hover:bg-panel/80">
-              <i class="fas fa-link mr-1"></i> 复制链接
+            <button type="button" class="copy-url-btn block text-center py-2 bg-white/10 hover:bg-white/15 border border-white/15 rounded-xl text-white text-xs">
+              <i class="fas fa-link mr-1"></i>复制链接
             </button>
-            <button type="button" class="copy-prompt-btn block text-center py-2 bg-panel rounded-xl text-white text-xs hover:bg-panel/80">
-              <i class="fas fa-copy mr-1"></i> 提示词
+            <button type="button" class="copy-prompt-btn block text-center py-2 bg-white/10 hover:bg-white/15 border border-white/15 rounded-xl text-white text-xs">
+              <i class="fas fa-copy mr-1"></i>提示词
             </button>
           </div>
         </div>
@@ -916,8 +1107,8 @@
           e.stopPropagation();
           navigator.clipboard.writeText(card.dataset.prompt || '').then(() => {
             const orig = copyPromptBtn.innerHTML;
-            copyPromptBtn.innerHTML = '<i class="fas fa-check mr-1"></i> 已复制';
-            setTimeout(() => copyPromptBtn.innerHTML = orig, 2000);
+            copyPromptBtn.innerHTML = '<i class="fas fa-check mr-1"></i>已复制';
+            setTimeout(() => copyPromptBtn.innerHTML = orig, 1600);
           });
         });
       }
@@ -929,8 +1120,8 @@
           e.stopPropagation();
           navigator.clipboard.writeText(card.dataset.url || '').then(() => {
             const orig = copyUrlBtn.innerHTML;
-            copyUrlBtn.innerHTML = '<i class="fas fa-check mr-1"></i> 已复制';
-            setTimeout(() => copyUrlBtn.innerHTML = orig, 2000);
+            copyUrlBtn.innerHTML = '<i class="fas fa-check mr-1"></i>已复制';
+            setTimeout(() => copyUrlBtn.innerHTML = orig, 1600);
           });
         });
       }
@@ -939,20 +1130,21 @@
       const placeholder = card.querySelector('.image-placeholder');
       if (!placeholder) return;
 
+      if (typeof url === 'string' && url.startsWith('http')) {
+        const bytes = await urlBytesLen(url);
+        if (bytes > 0 && bytes < MIN_BYTES) { card.remove(); return; }
+      }
+
       const img = document.createElement('img');
       img.src = url;
       img.className = 'w-full h-auto object-cover block';
       img.alt = card.dataset.prompt || 'image';
 
-      img.onload = () => { placeholder.innerHTML = ''; placeholder.appendChild(img); };
-      img.onerror = () => {
-        placeholder.innerHTML = `
-          <div class="text-center p-4">
-            <i class="fas fa-exclamation-circle text-3xl text-red-500 mb-2"></i>
-            <p class="text-gray-400 text-xs">加载失败</p>
-          </div>
-        `;
+      img.onload = () => {
+        placeholder.innerHTML = '';
+        placeholder.appendChild(img);
       };
+      img.onerror = () => { card.remove(); };
     },
     async loadVideoPreview(card, url) {
       const placeholder = card.querySelector('.video-container');
@@ -975,14 +1167,46 @@
       video.onerror = () => {
         placeholder.innerHTML = `
           <div class="flex flex-col items-center justify-center h-full text-center p-8">
-            <i class="fas fa-play-circle text-6xl text-primary mb-4 opacity-50"></i>
-            <p class="text-gray-400 text-sm">预览不可用</p>
+            <i class="fas fa-play-circle text-6xl mb-4 opacity-50"></i>
+            <p class="text-slate-500 dark:text-gray-400 text-sm">预览不可用</p>
           </div>
         `;
       };
 
       placeholder.appendChild(video);
       if (videoObserver) videoObserver.observe(video);
+    }
+  };
+
+  const VideoProgressUI = {
+    show(card) {
+      const box = card.querySelector('[data-video-progress]');
+      if (box) box.classList.add('show');
+    },
+    hide(card) {
+      const box = card.querySelector('[data-video-progress]');
+      if (box) box.classList.remove('show');
+    },
+    set(card, percent) {
+      const box = card.querySelector('[data-video-progress]');
+      if (!box) return;
+      const fill = box.querySelector('.progress-fill');
+      const pctEl = box.querySelector('[data-vpct]');
+      if (fill) fill.style.width = percent + '%';
+      if (pctEl) pctEl.textContent = percent + '%';
+      this.show(card);
+    },
+    done(card) {
+      const box = card.querySelector('[data-video-progress]');
+      if (!box) return;
+      const icon = box.querySelector('i');
+      if (icon) icon.className = 'fas fa-check text-green-500';
+    },
+    fail(card) {
+      const box = card.querySelector('[data-video-progress]');
+      if (!box) return;
+      const icon = box.querySelector('i');
+      if (icon) icon.className = 'fas fa-triangle-exclamation text-red-500';
     }
   };
 
@@ -1005,13 +1229,13 @@
 
         state.images = [];
         elements.previewGrid.innerHTML = '';
-        elements.previewContainer.style.display = 'none';
+        elements.previewContainer.classList.add('hidden');
 
         const isEdit = elements.model.value === 'grok-imagine-1.0-edit';
-        const maxImages = isEdit ? 3 : 1; // 前端限制 3（后端取最后3张）
+        const maxImages = isEdit ? 3 : 1;
         const processFiles = Array.from(files).slice(0, maxImages);
 
-        elements.previewContainer.style.display = 'block';
+        elements.previewContainer.classList.remove('hidden');
 
         processFiles.forEach((file) => {
           if (!file.type.startsWith('image/')) return Atoms.showError('只能上传图片文件');
@@ -1023,7 +1247,7 @@
             state.images.push({ file, dataUrl });
 
             const item = document.createElement('div');
-            item.className = 'preview-item aspect-square';
+            item.className = 'preview-item';
             const img = document.createElement('img');
             img.src = dataUrl;
             img.alt = 'reference';
@@ -1045,20 +1269,14 @@
     clearImage() {
       state.images = [];
       elements.previewGrid.innerHTML = '';
-      elements.previewContainer.style.display = 'none';
+      elements.previewContainer.classList.add('hidden');
       elements.inputImage.value = '';
       elements.imageCount.textContent = '0';
     },
     updateReferenceLabel() {
       const isEdit = elements.model.value === 'grok-imagine-1.0-edit';
-      const isVideo = elements.model.value === 'grok-imagine-1.0-video';
-      if (isEdit) {
-        elements.referenceLabel.innerHTML = '<i class="fas fa-image mr-2 text-primary"></i> 参考图像（必填，最多3张）';
-      } else if (isVideo) {
-        elements.referenceLabel.innerHTML = '<i class="fas fa-image mr-2 text-primary"></i> 参考图像（可选）';
-      } else {
-        elements.referenceLabel.innerHTML = '<i class="fas fa-image mr-2 text-primary"></i> 参考图像（可选）';
-      }
+      if (isEdit) elements.referenceLabel.textContent = '参考图（必选，最多3张）';
+      else elements.referenceLabel.textContent = '参考图（可选）';
     },
     syncFileInputMultiple() {
       elements.inputImage.multiple = elements.model.value === 'grok-imagine-1.0-edit';
@@ -1087,14 +1305,14 @@
       this.running = running;
       if (running) {
         elements.generationProgress.classList.add('show');
-        elements.generateBtn.innerHTML = '<i class="fas fa-stop mr-2"></i> 停止';
+        elements.generateBtn.innerHTML = '<i class="fas fa-stop mr-2"></i>停止';
         generatedCount = 0;
         elements.generationCounter.textContent = '已生成 0 个';
         generationStartTime = Date.now();
         this.startTimer();
       } else {
         elements.generationProgress.classList.remove('show');
-        elements.generateBtn.innerHTML = '<i class="fas fa-magic mr-2"></i> 生成';
+        elements.generateBtn.innerHTML = '<i class="fas fa-magic mr-2"></i>生成';
         if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
       }
     },
@@ -1104,7 +1322,7 @@
         if (!generationStartTime) return;
         const elapsed = Math.floor((Date.now() - generationStartTime) / 1000);
         elements.generationTimer.textContent = `总耗时 ${elapsed}s`;
-      }, 100);
+      }, 250);
     },
 
     stop() {
@@ -1113,127 +1331,79 @@
         this.abortController.abort();
         this.abortController = null;
       }
+
+      // 停止时移除所有未完成的视频卡片（pending）
+      document.querySelectorAll('.card[data-is-video="true"][data-status="pending"]').forEach(n => n.remove());
+
       this.workerPromises = [];
       this.setUI(false);
     },
 
-    async generateOneImageBatch(signal) {
-      const prompt = elements.prompt.value.trim();
-      const hasFiles = state.images.length > 0;
-      const files = hasFiles ? state.images.map(x => x.file) : [];
-      const size = elements.imageSize.value;
-      const response_format = elements.responseFormat.value;
-      const strength = elements.strength?.value;
-      const isEdit = elements.model.value === 'grok-imagine-1.0-edit';
+    onImage(url, prompt) {
+      if (!url) return;
 
-      const onImage = (url) => {
-        if (!url) return;
-        const card = Atoms.createPlaceholderCard(url, prompt);
-        elements.results.prepend(card);
-        Atoms.loadImagePreview(card, url);
+      const isFast = elements.model.value === 'grok-imagine-1.0-fast';
+      if (url.startsWith('data:')) {
+        const b64 = url.split(',')[1];
+        const bytes = base64BytesLen(b64);
+        if (!isFast && bytes < MIN_BYTES) return;
+      }
+
+      const card = Atoms.createPlaceholderCard(url, prompt);
+      elements.results.prepend(card);
+      Atoms.loadImagePreview(card, url);
+      if (document.body.contains(card)) {
         History.save(url, false, prompt).catch(() => {});
         generatedCount++;
         elements.generationCounter.textContent = `已生成 ${generatedCount} 个`;
         elements.empty.classList.add('hidden');
-      };
-
-      if (hasFiles) {
-        if (isEdit) {
-          const form = new FormData();
-          form.append('model', 'grok-imagine-1.0-edit');
-          form.append('prompt', prompt);
-          form.append('n', String(FIXED_IMAGE_N));
-          form.append('stream', 'true');
-          form.append('size', size);
-          form.append('response_format', response_format);
-          files.forEach((f, idx) => form.append('image', f, f.name || `reference_${idx}.png`));
-
-          await Atoms.apiPostStream('/images/edits', form, (evt) => {
-            const data = evt.data;
-            if (data && Array.isArray(data.data)) {
-              data.data.forEach(item => {
-                if (item.url) onImage(item.url);
-                else if (item.b64_json) onImage(`data:image/png;base64,${item.b64_json}`);
-              });
-            } else if (data?.url) onImage(data.url);
-            else if (data?.b64_json) onImage(`data:image/png;base64,${data.b64_json}`);
-          }, signal);
-
-        } else {
-          const first = files[0];
-          const dataUrl = await Atoms.fileToDataUrl(first);
-
-          const body = {
-            model: "grok-imagine-1.0",
-            messages: [{
-              role: "user",
-              content: [
-                { type: "text", text: prompt },
-                { type: "image_url", image_url: { url: dataUrl } }
-              ]
-            }],
-            stream: true,
-            image_config: {
-              n: FIXED_IMAGE_N,
-              size,
-              response_format,
-              strength: strength || '0.75'
-            }
-          };
-
-          await Atoms.apiPostStream('/chat/completions', body, (evt) => {
-            const data = evt.data;
-
-            if (data && Array.isArray(data.data)) {
-              data.data.forEach(item => {
-                if (item.url) onImage(item.url);
-                else if (item.b64_json) onImage(`data:image/png;base64,${item.b64_json}`);
-              });
-              return;
-            }
-
-            if (data?.url) return onImage(data.url);
-            if (data?.b64_json) return onImage(`data:image/png;base64,${data.b64_json}`);
-
-            const choices = data?.choices || [];
-            for (const c of choices) {
-              const content = c.delta?.content || c.message?.content;
-              if (typeof content === 'string' && content) {
-                const u = Atoms.extractUrl(content);
-                if (u) onImage(u);
-              }
-            }
-          }, signal);
-        }
-
-      } else {
-        const body = {
-          model: 'grok-imagine-1.0',
-          prompt,
-          n: FIXED_IMAGE_N,
-          stream: true,
-          size,
-          response_format
-        };
-
-        await Atoms.apiPostStream('/images/generations', body, (evt) => {
-          const data = evt.data;
-          if (data && Array.isArray(data.data)) {
-            data.data.forEach(item => {
-              if (item.url) onImage(item.url);
-              else if (item.b64_json) onImage(`data:image/png;base64,${item.b64_json}`);
-            });
-          } else if (data?.url) onImage(data.url);
-          else if (data?.b64_json) onImage(`data:image/png;base64,${data.b64_json}`);
-        }, signal);
       }
+    },
+
+    onVideo(url, prompt, card) {
+      if (!url) return;
+      card.dataset.url = url;
+      card.dataset.status = 'done';
+      Atoms.loadVideoPreview(card, url);
+      History.save(url, true, prompt).catch(() => {});
+      generatedCount++;
+      elements.generationCounter.textContent = `已生成 ${generatedCount} 个`;
+      elements.empty.classList.add('hidden');
     },
 
     async generateOneVideo(signal) {
       const prompt = elements.prompt.value.trim();
       const seconds = parseInt(elements.videoSeconds.value, 10);
-      const quality = elements.videoQuality.value; // standard/high
+      const quality = elements.videoQuality.value;
       const size = elements.videoSize.value;
+
+      const card = Atoms.createPlaceholderVideoCard('', prompt);
+      elements.results.prepend(card);
+      elements.empty.classList.add('hidden');
+
+      let displayed = 0;
+      const startTime = Date.now();
+      const EST_TOTAL_MS = 8000;
+
+      const uploadHandler = (pct) => {
+        const mapped = Math.floor(5 + (pct * 0.10));
+        if (mapped > displayed) {
+          displayed = mapped;
+          VideoProgressUI.set(card, displayed);
+        }
+      };
+
+      const estimateInterval = setInterval(() => {
+        if (!document.body.contains(card) || displayed >= 90) return;
+        const elapsed = Date.now() - startTime;
+        let target = Math.floor(15 + (elapsed / EST_TOTAL_MS) * 75);
+        if (target < displayed) target = displayed;
+        if (target > 90) target = 90;
+        if (target > displayed) {
+          displayed = target;
+          VideoProgressUI.set(card, displayed);
+        }
+      }, 200);
 
       const form = new FormData();
       form.append('model', 'grok-imagine-1.0-video');
@@ -1244,29 +1414,36 @@
 
       if (state.images.length > 0 && state.images[0].file) {
         const f = state.images[0].file;
-        form.append('input_reference', f, f.name || 'reference.png'); // 对齐后端：input_reference
+        form.append('input_reference', f, f.name || 'reference.png');
       }
 
-      const result = await Atoms.apiPostForm('/videos', form, signal);
+      try {
+        const result = await Atoms.apiPostFormWithProgress('/videos', form, uploadHandler, signal);
+        clearInterval(estimateInterval);
 
-      let url = result?.url
-        || result?.data?.url
-        || (Array.isArray(result?.data) ? result.data[0]?.url : null)
-        || result?.video_url
-        || result?.data?.video_url;
+        let url = result?.url
+          || result?.data?.url
+          || (Array.isArray(result?.data) ? result.data[0]?.url : null)
+          || result?.video_url
+          || result?.data?.video_url;
 
-      if (!url) {
-        console.warn('videos result:', result);
-        throw new Error('未获取到视频 url');
+        if (!url) throw new Error('未获取到视频链接');
+
+        VideoProgressUI.set(card, 100);
+        VideoProgressUI.done(card);
+        this.onVideo(url, prompt, card);
+      } catch (err) {
+        clearInterval(estimateInterval);
+        VideoProgressUI.fail(card);
+
+        // 停止/中断时移除未完成卡片
+        if (err && err.name === 'AbortError') {
+          if (card.dataset.status !== 'done') card.remove();
+        } else {
+          Atoms.showError(err.message || '视频生成失败');
+        }
+        throw err;
       }
-
-      const card = Atoms.createPlaceholderVideoCard(url, prompt);
-      elements.results.prepend(card);
-      Atoms.loadVideoPreview(card, url);
-      History.save(url, true, prompt).catch(() => {});
-      generatedCount++;
-      elements.generationCounter.textContent = `已生成 ${generatedCount} 个`;
-      elements.empty.classList.add('hidden');
     },
 
     async start() {
@@ -1276,20 +1453,146 @@
       if (!prompt) return Atoms.showError('请填写提示词');
       if (prompt.length < 2) return Atoms.showError('提示词太短');
       if (prompt.length > MAX_PROMPT_LENGTH) return Atoms.showError(`提示词最多 ${MAX_PROMPT_LENGTH} 字符`);
-
-      if (!Config.isValid(config)) { showConfigModal(); return Atoms.showError('请先配置 API Base URL'); }
+      if (!Config.isValid(config)) { showConfigModal(); return Atoms.showError('请先配置 Base URL'); }
 
       const isVideo = elements.model.value === 'grok-imagine-1.0-video';
       const isEdit = elements.model.value === 'grok-imagine-1.0-edit';
-
-      if (isEdit && state.images.length === 0) return Atoms.showError('图像编辑模式必须上传参考图像');
+      if (isEdit && state.images.length === 0) return Atoms.showError('图像编辑必须上传参考图');
 
       this.abortController = new AbortController();
       this.setUI(true);
+      elements.generationProgressText.textContent = isVideo ? '视频生成中...' : '图像生成中...';
 
-      elements.generationProgressText.textContent = isVideo
-        ? '视频生成中...'
-        : '图像生成中...';
+      const handleChatLikeStream = (evt) => {
+        const data = evt.data;
+        if (data && Array.isArray(data.data)) {
+          data.data.forEach(item => {
+            if (item.url) this.onImage(item.url, prompt);
+            else if (item.b64_json) this.onImage(`data:image/png;base64,${item.b64_json}`, prompt);
+          });
+          return;
+        }
+        if (data?.url) return this.onImage(data.url, prompt);
+        if (data?.b64_json) return this.onImage(`data:image/png;base64,${data.b64_json}`, prompt);
+
+        const choices = data?.choices || [];
+        for (const c of choices) {
+          const v = (c.delta && c.delta.content !== undefined) ? c.delta.content : c.message?.content;
+          if (!v) continue;
+
+          if (typeof v === 'string') {
+            const u = Atoms.extractUrl(v);
+            if (u) this.onImage(u, prompt);
+          } else if (Array.isArray(v)) {
+            for (const seg of v) {
+              const t = seg?.text || seg?.content || '';
+              const u = Atoms.extractUrl(t);
+              if (u) this.onImage(u, prompt);
+            }
+          } else if (typeof v === 'object') {
+            const u = Atoms.extractUrl(v);
+            if (u) this.onImage(u, prompt);
+          }
+        }
+      };
+
+      const generateOneImageBatch = async (signal) => {
+        const hasFiles = state.images.length > 0;
+        const files = hasFiles ? state.images.map(x => x.file) : [];
+        const size = elements.imageSize.value;
+        const response_format = elements.responseFormat.value;
+        const strength = elements.strength?.value;
+        const isEditMode = elements.model.value === 'grok-imagine-1.0-edit';
+        const selectedModel = elements.model.value;
+
+        const isFast = selectedModel === 'grok-imagine-1.0-fast';
+        const imageModel = isFast ? 'grok-imagine-1.0-fast' : 'grok-imagine-1.0';
+
+        if (hasFiles) {
+          if (isEditMode) {
+            const form = new FormData();
+            form.append('model', 'grok-imagine-1.0-edit');
+            form.append('prompt', prompt);
+            form.append('n', String(FIXED_IMAGE_N));
+            form.append('stream', 'true');
+            form.append('size', size);
+            form.append('response_format', response_format);
+            files.forEach((f, idx) => form.append('image', f, f.name || `reference_${idx}.png`));
+
+            await Atoms.apiPostStream('/images/edits', form, (evt) => {
+              const data = evt.data;
+              if (data && Array.isArray(data.data)) {
+                data.data.forEach(item => {
+                  if (item.url) this.onImage(item.url, prompt);
+                  else if (item.b64_json) this.onImage(`data:image/png;base64,${item.b64_json}`, prompt);
+                });
+              } else if (data?.url) this.onImage(data.url, prompt);
+              else if (data?.b64_json) this.onImage(`data:image/png;base64,${data.b64_json}`, prompt);
+            }, signal);
+          } else {
+            const first = files[0];
+            const dataUrl = await Atoms.fileToDataUrl(first);
+
+            const body = {
+              model: imageModel,
+              messages: [{
+                role: "user",
+                content: [
+                  { type: "text", text: prompt },
+                  { type: "image_url", image_url: { url: dataUrl } }
+                ]
+              }],
+              stream: true,
+              image_config: {
+                n: FIXED_IMAGE_N,
+                size,
+                response_format,
+                strength: strength || '0.75'
+              }
+            };
+
+            await Atoms.apiPostStream('/chat/completions', body, (evt) => handleChatLikeStream(evt), signal);
+          }
+        } else {
+          if (imageModel === 'grok-imagine-1.0-fast') {
+            const body = {
+              model: imageModel,
+              messages: [{
+                role: "user",
+                content: [{ type: "text", text: prompt }]
+              }],
+              stream: true,
+              image_config: {
+                n: FIXED_IMAGE_N,
+                size,
+                response_format
+              }
+            };
+
+            await Atoms.apiPostStream('/chat/completions', body, (evt) => handleChatLikeStream(evt), signal);
+          } else {
+            const body = {
+              model: imageModel,
+              prompt,
+              n: FIXED_IMAGE_N,
+              stream: true,
+              size,
+              response_format
+            };
+
+            await Atoms.apiPostStream('/images/generations', body, (evt) => {
+              const data = evt.data;
+              if (data && Array.isArray(data.data)) {
+                data.data.forEach(item => {
+                  if (item.url) this.onImage(item.url, prompt);
+                  else if (item.b64_json) this.onImage(`data:image/png;base64,${item.b64_json}`, prompt);
+                });
+              } else if (data?.url) this.onImage(data.url, prompt);
+              else if (data?.b64_json) this.onImage(`data:image/png;base64,${data.b64_json}`, prompt);
+            }, signal);
+          }
+        }
+      };
 
       try {
         if (isVideo) {
@@ -1298,8 +1601,7 @@
               try { await this.generateOneVideo(this.abortController.signal); }
               catch (e) {
                 if (e.name === 'AbortError') break;
-                console.error(e);
-                await new Promise(r => setTimeout(r, 1000));
+                await new Promise(r => setTimeout(r, 900));
               }
               await new Promise(r => setTimeout(r, 150));
             }
@@ -1308,11 +1610,10 @@
         } else {
           this.workerPromises = Array.from({ length: MAX_CONCURRENCY }).map(async () => {
             while (this.running) {
-              try { await this.generateOneImageBatch(this.abortController.signal); }
+              try { await generateOneImageBatch(this.abortController.signal); }
               catch (e) {
                 if (e.name === 'AbortError') break;
-                console.error(e);
-                await new Promise(r => setTimeout(r, 1000));
+                await new Promise(r => setTimeout(r, 900));
               }
               await new Promise(r => setTimeout(r, 150));
             }
@@ -1333,9 +1634,7 @@
     elements.configHistoryKey.value = config.historyKey;
     elements.configModal.classList.remove('hidden');
   }
-  function hideConfigModal() {
-    elements.configModal.classList.add('hidden');
-  }
+  function hideConfigModal() { elements.configModal.classList.add('hidden'); }
 
   elements.openConfig.addEventListener('click', showConfigModal);
   elements.saveConfig.addEventListener('click', () => {
@@ -1348,12 +1647,10 @@
     config = newConfig;
     Config.save(config);
     hideConfigModal();
-    Atoms.showError('配置已保存');
   });
   elements.closeConfig.addEventListener('click', hideConfigModal);
-  elements.configModal.addEventListener('click', (e) => {
-    if (e.target === elements.configModal) hideConfigModal();
-  });
+  elements.cancelConfig.addEventListener('click', hideConfigModal);
+  elements.configModal.addEventListener('click', (e) => { if (e.target === elements.configModal) hideConfigModal(); });
 
   document.addEventListener('DOMContentLoaded', async () => {
     videoObserver = new IntersectionObserver((entries) => {
@@ -1363,6 +1660,9 @@
         else video.pause();
       });
     }, { threshold: 0.5 });
+
+    Theme.init();
+    elements.themeToggle.addEventListener('click', () => Theme.cycle());
 
     if (!Config.isValid(config)) showConfigModal();
 
