@@ -471,6 +471,21 @@
   const MAX_CONCURRENCY = 3;
   const MIN_BYTES = 50 * 1024;
 
+  // ── PERF 1: 预编译所有正则，避免每次调用重建 RegExp 对象 ──────────────────
+  const RE_CODE_BLOCKS      = /```[\s\S]*?```/g;
+  const RE_MD_IMG           = /!\[[^\]]*]\((https?:\/\/[^)\s]+)\)/i;
+  const RE_HTTP_URL         = /https?:\/\/[^\s<>"{}|\\^`]*/i;
+  const RE_REL_IMG          = /\/[^\s<>"{}|\\^`]*\.(png|jpg|jpeg|webp|gif)/i;
+  const RE_DATA_MIME        = /^data:([^;,]+)/;
+  const RE_URL_STRIP_START  = /^["'(<[]+/;
+  const RE_URL_STRIP_END    = /[\s"'>)\],.]+$/;
+  const RE_FILENAME_UNSAFE  = /[<>:"/\\|?*]/g;
+  const RE_QUERY_HASH       = /[?#].*/;
+  const RE_PROMPT_UNSAFE    = /[^a-zA-Z0-9\u4e00-\u9fa5]/g;
+  const RE_UNDERSCORES      = /_+/g;
+  const RE_TRIM_UNDERSCORES = /^_+|_+$/g;
+  const RE_EXT_SUFFIX       = /\.[^/.]+$/;
+
   const db = new Dexie('GrokImagineDB');
   db.version(1).stores({ history: '++id, url, isVideo, prompt, timestamp' });
 
@@ -518,12 +533,8 @@
     apply() {
       const isDark = this.appliedIsDark();
       document.documentElement.classList.toggle('dark', isDark);
-
-      // iOS/Safari 可能会优先使用带 media 的 theme-color；
-      // 手动切换不改变 prefers-color-scheme，所以需要同时更新所有 theme-color meta。
       const metas = Array.from(document.querySelectorAll('meta[name="theme-color"]'));
       metas.forEach(m => m.setAttribute('content', isDark ? '#0B0F1A' : '#ffffff'));
-
       elements.themeText.textContent = (this.mode === 'system') ? '跟随系统' : (this.mode === 'dark' ? '深色' : '浅色');
       elements.themeIcon.className = 'fas mr-2 ' + (
         this.mode === 'system' ? 'fa-circle-half-stroke' :
@@ -637,12 +648,12 @@
     if (url.startsWith('data:')) return null;
     try {
       const u = new URL(url);
-      let pathname = (u.pathname || '').replace(/\/$/, '');
-      let filename = pathname.split('/').pop();
+      // PERF 1: RE_QUERY_HASH 预编译，避免重建
+      let filename = u.pathname.replace(/\/$/, '').split('/').pop();
       if (filename && filename.includes('.')) {
-        filename = filename.split('?')[0].split('#')[0];
+        filename = filename.replace(RE_QUERY_HASH, '');
         try { filename = decodeURIComponent(filename); } catch (_) {}
-        filename = filename.replace(/[<>:"/\\|?*]/g, '_');
+        filename = filename.replace(RE_FILENAME_UNSAFE, '_');
         return filename;
       }
     } catch (_) {}
@@ -651,12 +662,12 @@
 
   function getExtFromDataUrl(url) {
     if (!url || !url.startsWith('data:')) return 'png';
-    const m = url.match(/^data:([^;,]+)/);
+    // PERF 1: RE_DATA_MIME 预编译
+    const m = url.match(RE_DATA_MIME);
     if (!m) return 'png';
     const mime = m[1].toLowerCase();
     if (mime.includes('jpeg') || mime.includes('jpg')) return 'jpg';
     if (mime.includes('webp')) return 'webp';
-    if (mime.includes('png')) return 'png';
     if (mime.includes('gif')) return 'gif';
     return 'png';
   }
@@ -665,8 +676,9 @@
     const random = Math.random().toString(36).slice(2, 8);
     let safe = '';
     if (prompt) {
-      safe = prompt.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_').slice(0, 20);
-      safe = safe.replace(/_+/g, '_').replace(/^_+|_+$/g, '');
+      // PERF 1: RE_PROMPT_UNSAFE / RE_UNDERSCORES / RE_TRIM_UNDERSCORES 预编译
+      safe = prompt.replace(RE_PROMPT_UNSAFE, '_').slice(0, 20);
+      safe = safe.replace(RE_UNDERSCORES, '_').replace(RE_TRIM_UNDERSCORES, '');
     }
     return safe ? `grok_${safe}_${index}_${random}.${ext}` : `grok_${Date.now()}_${index}_${random}.${ext}`;
   }
@@ -738,8 +750,9 @@
           const ext = isVideo ? 'mp4' : (url.startsWith('data:') ? getExtFromDataUrl(url) : 'png');
           filename = generateFilename(prompt, idx + 1, ext);
         } else {
+          // PERF 1: RE_EXT_SUFFIX 预编译
           const ext = isVideo ? 'mp4' : (filename.split('.').pop() || 'png');
-          const base = filename.replace(/\.[^/.]+$/, '');
+          const base = filename.replace(RE_EXT_SUFFIX, '');
           filename = `${base}_${idx + 1}.${ext}`;
         }
 
@@ -750,7 +763,7 @@
           folder.file(filename, blob);
           ok++;
         } catch (e) {
-          folder.file(filename.replace(/\.[^/.]+$/, '') + '_link.txt', `url: ${url}\nprompt: ${prompt}\nerror: ${e.message}`);
+          folder.file(filename.replace(RE_EXT_SUFFIX, '') + '_link.txt', `url: ${url}\nprompt: ${prompt}\nerror: ${e.message}`);
           fail++;
         }
       }));
@@ -782,7 +795,8 @@
   function disableMultiSelectMode() {
     multiSelectMode = false;
     document.body.classList.remove('multi-select-mode');
-    document.querySelectorAll('.select-checkbox').forEach(cb => cb.checked = false);
+    // PERF 6: 只查已选中的，减少需要操作的节点数
+    document.querySelectorAll('.select-checkbox:checked').forEach(cb => cb.checked = false);
     updateSelectionBar();
   }
 
@@ -794,53 +808,118 @@
     if (document.querySelectorAll('.select-checkbox:checked').length === 0) disableMultiSelectMode();
   }
 
+  // PERF 6: 单次 querySelectorAll，用 classList.toggle 代替 if/else 双分支
   function updateSelectionBar() {
     const n = document.querySelectorAll('.select-checkbox:checked').length;
     elements.selectedCount.textContent = n;
-    if (n > 0) {
-      elements.selectionBar.classList.remove('hidden');
-      elements.selectionBar.classList.add('show');
-    } else {
-      elements.selectionBar.classList.add('hidden');
-      elements.selectionBar.classList.remove('show');
-    }
+    elements.selectionBar.classList.toggle('hidden', n === 0);
+    elements.selectionBar.classList.toggle('show', n > 0);
   }
 
   elements.downloadSelected.addEventListener('click', downloadSelectedAsZip);
   elements.cancelSelection.addEventListener('click', disableMultiSelectMode);
+
+  // PERF 6: 单次 querySelectorAll 拿到全部 checkbox，用 every() 判断是否已全选
   elements.selectAll.addEventListener('click', () => {
-    const all = document.querySelectorAll('.card');
-    const allChecked = document.querySelectorAll('.select-checkbox:checked').length === all.length;
-    all.forEach(card => {
-      const cb = card.querySelector('.select-checkbox');
-      if (cb) cb.checked = !allChecked;
-    });
+    const checkboxes = Array.from(document.querySelectorAll('.card .select-checkbox'));
+    const allChecked = checkboxes.every(cb => cb.checked);
+    checkboxes.forEach(cb => cb.checked = !allChecked);
     updateSelectionBar();
   });
 
+  // ── PERF 7: cleanUrl / normalizeUrl 提升为模块级函数，
+  //    避免 extractUrl 每次调用都重建两个内部闭包 ──────────────────────────
+  function cleanUrl(u) {
+    if (!u || typeof u !== 'string') return null;
+    u = u.trim().replace(RE_URL_STRIP_START, '').replace(RE_URL_STRIP_END, '');
+    return u || null;
+  }
+
+  function normalizeUrl(u) {
+    const cleaned = cleanUrl(u);
+    if (!cleaned) return null;
+    if (cleaned.startsWith('http://') || cleaned.startsWith('https://') || cleaned.startsWith('data:')) return cleaned;
+    if (cleaned.startsWith('/')) {
+      const base = (config.base || '').trim().replace(/\/+$/, '');
+      return base ? (base + cleaned) : cleaned;
+    }
+    return null;
+  }
+
+  // ── PERF 4: VideoProgressUI 用 WeakMap 缓存每张卡片的子节点引用，
+  //    避免每次 set/done/fail 都重新 querySelector ──────────────────────────
+  const _vpCache = new WeakMap();
+
+  const VideoProgressUI = {
+    _refs(card) {
+      if (_vpCache.has(card)) return _vpCache.get(card);
+      const box = card.querySelector('[data-video-progress]');
+      if (!box) return null;
+      const refs = {
+        box,
+        fill: box.querySelector('.progress-fill'),
+        pct:  box.querySelector('[data-vpct]'),
+        icon: box.querySelector('i')
+      };
+      _vpCache.set(card, refs);
+      return refs;
+    },
+    show(card) { this._refs(card)?.box.classList.add('show'); },
+    hide(card) { this._refs(card)?.box.classList.remove('show'); },
+    set(card, percent) {
+      const refs = this._refs(card);
+      if (!refs) return;
+      if (refs.fill) refs.fill.style.width = percent + '%';
+      if (refs.pct)  refs.pct.textContent  = percent + '%';
+      refs.box.classList.add('show');
+    },
+    done(card) {
+      const refs = this._refs(card);
+      if (refs?.icon) refs.icon.className = 'fas fa-check text-green-500';
+    },
+    fail(card) {
+      const refs = this._refs(card);
+      if (refs?.icon) refs.icon.className = 'fas fa-triangle-exclamation text-red-500';
+    }
+  };
+
   const History = {
+    // PERF 2: DocumentFragment 批量插入，减少页面重排次数
     async load() {
       try {
         const items = await db.history.orderBy('timestamp').reverse().toArray();
-        items.forEach(item => {
+        if (!items.length) return;
+
+        const frag = document.createDocumentFragment();
+        const pending = [];
+
+        for (const item of items) {
           const card = item.isVideo
             ? Atoms.createPlaceholderVideoCard(item.url, item.prompt)
             : Atoms.createPlaceholderCard(item.url, item.prompt);
           card.dataset.isVideo = String(!!item.isVideo);
-          card.dataset.prompt = item.prompt || '';
-          elements.results.appendChild(card);
+          card.dataset.prompt  = item.prompt || '';
+          frag.appendChild(card);
+          pending.push({ card, item });
+        }
+
+        // 一次性挂载所有卡片，触发单次重排
+        elements.results.appendChild(frag);
+        elements.empty.classList.add('hidden');
+
+        // 挂载后再启动各自的懒加载（不阻塞 DOM 插入）
+        for (const { card, item } of pending) {
           if (item.isVideo) Atoms.loadVideoPreview(card, item.url);
-          else Atoms.loadImagePreview(card, item.url);
-        });
-        if (items.length > 0) elements.empty.classList.add('hidden');
-      } catch (e) {}
+          else              Atoms.loadImagePreview(card, item.url);
+        }
+      } catch (_) {}
     },
     async save(url, isVideo, prompt) {
       try {
         const existing = await db.history.where('url').equals(url).first();
         if (existing) return;
         await db.history.add({ url, isVideo, prompt: (prompt || '').substring(0, 200), timestamp: Date.now() });
-      } catch (e) {}
+      } catch (_) {}
     },
     async clear() {
       await db.history.clear();
@@ -871,47 +950,23 @@
       elements.error.classList.remove('hidden');
       setTimeout(() => elements.error.classList.add('hidden'), 5000);
     },
-    // ---------- extractUrl：能去掉尾部标点、处理 Markdown、拼接相对路径 ----------
+
+    // PERF 1 + PERF 7: 使用预编译正则 & 提升后的 normalizeUrl/cleanUrl
     extractUrl(content) {
       if (!content) return null;
-
-      const cleanUrl = (u) => {
-        if (!u || typeof u !== 'string') return null;
-        u = u.trim();
-        u = u.replace(/^["'(<[]+/, '');
-        u = u.replace(/[\s"'>)\],.]+$/, '');
-        if (!u) return null;
-        return u;
-      };
-
-      const normalize = (u) => {
-        const cleaned = cleanUrl(u);
-        if (!cleaned) return null;
-        if (cleaned.startsWith('http://') || cleaned.startsWith('https://') || cleaned.startsWith('data:')) return cleaned;
-        if (cleaned.startsWith('/')) {
-          const base = (config.base || '').trim().replace(/\/+$/, '');
-          return base ? (base + cleaned) : cleaned;
-        }
-        return null;
-      };
-
       if (typeof content !== 'string') {
         try { content = JSON.stringify(content); } catch { return null; }
       }
-
-      const s = content.replace(/```[\s\S]*?```/g, '').trim();
-
-      const mdImg = s.match(/!\[[^\]]*]\((https?:\/\/[^)\s]+)\)/i);
-      if (mdImg) return normalize(mdImg[1]);
-
-      const mHttp = s.match(/https?:\/\/[^\s<>"{}|\\^`]*/i);
-      if (mHttp) return normalize(mHttp[0]);
-
-      const mRel = s.match(/\/[^\s<>"{}|\\^`]*\.(png|jpg|jpeg|webp|gif)/i);
-      if (mRel) return normalize(mRel[0]);
-
+      const s = content.replace(RE_CODE_BLOCKS, '').trim();
+      const mdImg = s.match(RE_MD_IMG);
+      if (mdImg) return normalizeUrl(mdImg[1]);
+      const mHttp = s.match(RE_HTTP_URL);
+      if (mHttp) return normalizeUrl(mHttp[0]);
+      const mRel = s.match(RE_REL_IMG);
+      if (mRel) return normalizeUrl(mRel[0]);
       return null;
     },
+
     fileToDataUrl(file) {
       return new Promise((resolve, reject) => {
         const r = new FileReader();
@@ -1002,13 +1057,14 @@
         xhr.send(formData);
       });
     },
+
+    // PERF 3: 移除 attachCardEvents，改由 setupResultsDelegation 统一代理
     createPlaceholderCard(url, prompt) {
       const card = document.createElement('div');
       card.className = 'card glass';
-      card.dataset.url = url || '';
+      card.dataset.url    = url || '';
       card.dataset.prompt = prompt || '';
       card.dataset.isVideo = 'false';
-
       card.innerHTML = `
         <input type="checkbox" class="select-checkbox absolute top-3 left-3 z-20 w-5 h-5 accent-cyan-400 rounded cursor-pointer">
         <div class="media-wrap image-placeholder relative overflow-hidden">
@@ -1024,18 +1080,15 @@
           </button>
         </div>
       `;
-      this.attachCardEvents(card);
       return card;
     },
     createPlaceholderVideoCard(url, prompt) {
       const card = document.createElement('div');
       card.className = 'card glass';
-      card.dataset.url = url || '';
+      card.dataset.url    = url || '';
       card.dataset.prompt = prompt || '';
       card.dataset.isVideo = 'true';
-      // pending：停止/中断时需要移除未完成卡片；成功拿到 url 后会标记为 done
-      card.dataset.status = 'pending';
-
+      card.dataset.status  = 'pending';
       card.innerHTML = `
         <div class="video-progress glass" data-video-progress>
           <div class="row">
@@ -1047,7 +1100,6 @@
           </div>
           <div class="progress-bar"><div class="progress-fill" style="width:0%"></div></div>
         </div>
-
         <input type="checkbox" class="select-checkbox absolute top-3 left-3 z-20 w-5 h-5 accent-cyan-400 rounded cursor-pointer">
         <div class="media-wrap video-container relative overflow-hidden">
           <i class="fas fa-spinner spinner text-4xl"></i>
@@ -1067,65 +1119,9 @@
           </div>
         </div>
       `;
-      this.attachCardEvents(card);
       return card;
     },
-    attachCardEvents(card) {
-      card.addEventListener('touchstart', () => card.classList.add('touched'), { passive: true });
-      card.addEventListener('touchend', () => card.classList.remove('touched'), { passive: true });
-      card.addEventListener('mouseleave', () => card.classList.remove('touched'));
 
-      card.addEventListener('dblclick', (e) => {
-        e.preventDefault();
-        enableMultiSelectMode();
-        const cb = card.querySelector('.select-checkbox');
-        if (cb) cb.checked = true;
-        updateSelectionBar();
-      });
-
-      card.addEventListener('click', (e) => {
-        if (!multiSelectMode) return;
-        const clicked = e.target.closest('button') || e.target.closest('a') || e.target.closest('input');
-        if (clicked) return;
-        e.preventDefault();
-        toggleCardSelection(card);
-      });
-
-      const downloadBtn = card.querySelector('.single-download');
-      if (downloadBtn) {
-        downloadBtn.addEventListener('click', async (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          await downloadFile(card.dataset.url, card.dataset.prompt, card.dataset.isVideo === 'true');
-        });
-      }
-
-      const copyPromptBtn = card.querySelector('.copy-prompt-btn');
-      if (copyPromptBtn) {
-        copyPromptBtn.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          navigator.clipboard.writeText(card.dataset.prompt || '').then(() => {
-            const orig = copyPromptBtn.innerHTML;
-            copyPromptBtn.innerHTML = '<i class="fas fa-check mr-1"></i>已复制';
-            setTimeout(() => copyPromptBtn.innerHTML = orig, 1600);
-          });
-        });
-      }
-
-      const copyUrlBtn = card.querySelector('.copy-url-btn');
-      if (copyUrlBtn) {
-        copyUrlBtn.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          navigator.clipboard.writeText(card.dataset.url || '').then(() => {
-            const orig = copyUrlBtn.innerHTML;
-            copyUrlBtn.innerHTML = '<i class="fas fa-check mr-1"></i>已复制';
-            setTimeout(() => copyUrlBtn.innerHTML = orig, 1600);
-          });
-        });
-      }
-    },
     async loadImagePreview(card, url) {
       const placeholder = card.querySelector('.image-placeholder');
       if (!placeholder) return;
@@ -1139,11 +1135,7 @@
       img.src = url;
       img.className = 'w-full h-auto object-cover block';
       img.alt = card.dataset.prompt || 'image';
-
-      img.onload = () => {
-        placeholder.innerHTML = '';
-        placeholder.appendChild(img);
-      };
+      img.onload = () => { placeholder.innerHTML = ''; placeholder.appendChild(img); };
       img.onerror = () => { card.remove(); };
     },
     async loadVideoPreview(card, url) {
@@ -1152,15 +1144,15 @@
       placeholder.innerHTML = '';
 
       const video = document.createElement('video');
-      video.controls = false;
-      video.muted = true;
+      video.controls   = false;
+      video.muted      = true;
       video.playsInline = true;
-      video.loop = true;
-      video.preload = 'metadata';
-      video.className = 'w-full h-full object-cover';
+      video.loop       = true;
+      video.preload    = 'metadata';
+      video.className  = 'w-full h-full object-cover';
 
       const source = document.createElement('source');
-      source.src = url;
+      source.src  = url;
       source.type = 'video/mp4';
       video.appendChild(source);
 
@@ -1178,37 +1170,80 @@
     }
   };
 
-  const VideoProgressUI = {
-    show(card) {
-      const box = card.querySelector('[data-video-progress]');
-      if (box) box.classList.add('show');
-    },
-    hide(card) {
-      const box = card.querySelector('[data-video-progress]');
-      if (box) box.classList.remove('show');
-    },
-    set(card, percent) {
-      const box = card.querySelector('[data-video-progress]');
-      if (!box) return;
-      const fill = box.querySelector('.progress-fill');
-      const pctEl = box.querySelector('[data-vpct]');
-      if (fill) fill.style.width = percent + '%';
-      if (pctEl) pctEl.textContent = percent + '%';
-      this.show(card);
-    },
-    done(card) {
-      const box = card.querySelector('[data-video-progress]');
-      if (!box) return;
-      const icon = box.querySelector('i');
-      if (icon) icon.className = 'fas fa-check text-green-500';
-    },
-    fail(card) {
-      const box = card.querySelector('[data-video-progress]');
-      if (!box) return;
-      const icon = box.querySelector('i');
-      if (icon) icon.className = 'fas fa-triangle-exclamation text-red-500';
-    }
-  };
+  // ── PERF 3: 事件委托 ──────────────────────────────────────────────────────
+  // 原来每张卡片挂 6~8 个监听器；现在全部由 #results 容器统一代理，
+  // 无论历史记录有多少张卡片，监听器总数固定为 5 个。
+  function setupResultsDelegation() {
+    const r = elements.results;
+
+    // touch overlay（passive，不阻塞滚动）
+    r.addEventListener('touchstart', e => {
+      e.target.closest('.card')?.classList.add('touched');
+    }, { passive: true });
+
+    r.addEventListener('touchend', e => {
+      e.target.closest('.card')?.classList.remove('touched');
+    }, { passive: true });
+
+    // mouseleave 不冒泡，改用 mouseout + relatedTarget 判断模拟
+    r.addEventListener('mouseout', e => {
+      const card = e.target.closest('.card');
+      if (card && !card.contains(e.relatedTarget)) card.classList.remove('touched');
+    }, { passive: true });
+
+    // 双击进入多选
+    r.addEventListener('dblclick', e => {
+      const card = e.target.closest('.card');
+      if (!card) return;
+      e.preventDefault();
+      enableMultiSelectMode();
+      const cb = card.querySelector('.select-checkbox');
+      if (cb) cb.checked = true;
+      updateSelectionBar();
+    });
+
+    // 所有按钮点击 + 多选模式切换，统一在此处理
+    r.addEventListener('click', async e => {
+      const card = e.target.closest('.card');
+      if (!card) return;
+
+      const dlBtn = e.target.closest('.single-download');
+      if (dlBtn) {
+        e.preventDefault(); e.stopPropagation();
+        await downloadFile(card.dataset.url, card.dataset.prompt, card.dataset.isVideo === 'true');
+        return;
+      }
+
+      const cpBtn = e.target.closest('.copy-prompt-btn');
+      if (cpBtn) {
+        e.preventDefault(); e.stopPropagation();
+        try {
+          await navigator.clipboard.writeText(card.dataset.prompt || '');
+          const orig = cpBtn.innerHTML;
+          cpBtn.innerHTML = '<i class="fas fa-check mr-1"></i>已复制';
+          setTimeout(() => cpBtn.innerHTML = orig, 1600);
+        } catch (_) {}
+        return;
+      }
+
+      const cuBtn = e.target.closest('.copy-url-btn');
+      if (cuBtn) {
+        e.preventDefault(); e.stopPropagation();
+        try {
+          await navigator.clipboard.writeText(card.dataset.url || '');
+          const orig = cuBtn.innerHTML;
+          cuBtn.innerHTML = '<i class="fas fa-check mr-1"></i>已复制';
+          setTimeout(() => cuBtn.innerHTML = orig, 1600);
+        } catch (_) {}
+        return;
+      }
+
+      if (multiSelectMode && !e.target.closest('button, a, input')) {
+        e.preventDefault();
+        toggleCardSelection(card);
+      }
+    });
+  }
 
   const InputMolecule = {
     init() {
@@ -1275,8 +1310,7 @@
     },
     updateReferenceLabel() {
       const isEdit = elements.model.value === 'grok-imagine-1.0-edit';
-      if (isEdit) elements.referenceLabel.textContent = '参考图（必选，最多3张）';
-      else elements.referenceLabel.textContent = '参考图（可选）';
+      elements.referenceLabel.textContent = isEdit ? '参考图（必选，最多3张）' : '参考图（可选）';
     },
     syncFileInputMultiple() {
       elements.inputImage.multiple = elements.model.value === 'grok-imagine-1.0-edit';
@@ -1289,9 +1323,8 @@
     },
     updateStrengthVisibility() {
       const isVideo = elements.model.value === 'grok-imagine-1.0-video';
-      const isEdit = elements.model.value === 'grok-imagine-1.0-edit';
-      const hasImage = state.images.length > 0;
-      const show = !isVideo && !isEdit && hasImage;
+      const isEdit  = elements.model.value === 'grok-imagine-1.0-edit';
+      const show = !isVideo && !isEdit && state.images.length > 0;
       elements.strengthParam.classList.toggle('hidden', !show);
     }
   };
@@ -1300,6 +1333,8 @@
     running: false,
     abortController: null,
     workerPromises: [],
+    // PERF 8: 生成开始时读取一次模型值，循环内不重复访问 DOM
+    _currentModel: '',
 
     setUI(running) {
       this.running = running;
@@ -1331,38 +1366,33 @@
         this.abortController.abort();
         this.abortController = null;
       }
-
-      // 停止时移除所有未完成的视频卡片（pending）
       document.querySelectorAll('.card[data-is-video="true"][data-status="pending"]').forEach(n => n.remove());
-
       this.workerPromises = [];
       this.setUI(false);
     },
 
+    // PERF 5: 移除恒真的 document.body.contains(card) 检查
+    // （card 在 prepend 后必然在 DOM 中，该检查永远为 true）
     onImage(url, prompt) {
       if (!url) return;
-
-      const isFast = elements.model.value === 'grok-imagine-1.0-fast';
+      // PERF 8: 使用缓存的模型值，不重复读 DOM
       if (url.startsWith('data:')) {
         const b64 = url.split(',')[1];
         const bytes = base64BytesLen(b64);
-        if (!isFast && bytes < MIN_BYTES) return;
+        if (this._currentModel !== 'grok-imagine-1.0-fast' && bytes < MIN_BYTES) return;
       }
-
       const card = Atoms.createPlaceholderCard(url, prompt);
       elements.results.prepend(card);
       Atoms.loadImagePreview(card, url);
-      if (document.body.contains(card)) {
-        History.save(url, false, prompt).catch(() => {});
-        generatedCount++;
-        elements.generationCounter.textContent = `已生成 ${generatedCount} 个`;
-        elements.empty.classList.add('hidden');
-      }
+      History.save(url, false, prompt).catch(() => {});
+      generatedCount++;
+      elements.generationCounter.textContent = `已生成 ${generatedCount} 个`;
+      elements.empty.classList.add('hidden');
     },
 
     onVideo(url, prompt, card) {
       if (!url) return;
-      card.dataset.url = url;
+      card.dataset.url    = url;
       card.dataset.status = 'done';
       Atoms.loadVideoPreview(card, url);
       History.save(url, true, prompt).catch(() => {});
@@ -1372,10 +1402,10 @@
     },
 
     async generateOneVideo(signal) {
-      const prompt = elements.prompt.value.trim();
+      const prompt  = elements.prompt.value.trim();
       const seconds = parseInt(elements.videoSeconds.value, 10);
       const quality = elements.videoQuality.value;
-      const size = elements.videoSize.value;
+      const size    = elements.videoSize.value;
 
       const card = Atoms.createPlaceholderVideoCard('', prompt);
       elements.results.prepend(card);
@@ -1399,10 +1429,7 @@
         let target = Math.floor(15 + (elapsed / EST_TOTAL_MS) * 75);
         if (target < displayed) target = displayed;
         if (target > 90) target = 90;
-        if (target > displayed) {
-          displayed = target;
-          VideoProgressUI.set(card, displayed);
-        }
+        if (target > displayed) { displayed = target; VideoProgressUI.set(card, displayed); }
       }, 200);
 
       const form = new FormData();
@@ -1435,8 +1462,6 @@
       } catch (err) {
         clearInterval(estimateInterval);
         VideoProgressUI.fail(card);
-
-        // 停止/中断时移除未完成卡片
         if (err && err.name === 'AbortError') {
           if (card.dataset.status !== 'done') card.remove();
         } else {
@@ -1455,8 +1480,13 @@
       if (prompt.length > MAX_PROMPT_LENGTH) return Atoms.showError(`提示词最多 ${MAX_PROMPT_LENGTH} 字符`);
       if (!Config.isValid(config)) { showConfigModal(); return Atoms.showError('请先配置 Base URL'); }
 
-      const isVideo = elements.model.value === 'grok-imagine-1.0-video';
-      const isEdit = elements.model.value === 'grok-imagine-1.0-edit';
+      // PERF 8: 生成开始时读取并缓存模型值
+      this._currentModel = elements.model.value;
+      const isVideo  = this._currentModel === 'grok-imagine-1.0-video';
+      const isEdit   = this._currentModel === 'grok-imagine-1.0-edit';
+      const isFast   = this._currentModel === 'grok-imagine-1.0-fast';
+      const imageModel = isFast ? 'grok-imagine-1.0-fast' : 'grok-imagine-1.0';
+
       if (isEdit && state.images.length === 0) return Atoms.showError('图像编辑必须上传参考图');
 
       this.abortController = new AbortController();
@@ -1479,7 +1509,6 @@
         for (const c of choices) {
           const v = (c.delta && c.delta.content !== undefined) ? c.delta.content : c.message?.content;
           if (!v) continue;
-
           if (typeof v === 'string') {
             const u = Atoms.extractUrl(v);
             if (u) this.onImage(u, prompt);
@@ -1496,20 +1525,16 @@
         }
       };
 
+      // PERF 8: imageModel / isEdit / isFast 均来自生成开始时的缓存，不再每批读 DOM
       const generateOneImageBatch = async (signal) => {
-        const hasFiles = state.images.length > 0;
-        const files = hasFiles ? state.images.map(x => x.file) : [];
-        const size = elements.imageSize.value;
+        const hasFiles        = state.images.length > 0;
+        const files           = hasFiles ? state.images.map(x => x.file) : [];
+        const size            = elements.imageSize.value;
         const response_format = elements.responseFormat.value;
-        const strength = elements.strength?.value;
-        const isEditMode = elements.model.value === 'grok-imagine-1.0-edit';
-        const selectedModel = elements.model.value;
-
-        const isFast = selectedModel === 'grok-imagine-1.0-fast';
-        const imageModel = isFast ? 'grok-imagine-1.0-fast' : 'grok-imagine-1.0';
+        const strength        = elements.strength?.value;
 
         if (hasFiles) {
-          if (isEditMode) {
+          if (isEdit) {
             const form = new FormData();
             form.append('model', 'grok-imagine-1.0-edit');
             form.append('prompt', prompt);
@@ -1530,45 +1555,29 @@
               else if (data?.b64_json) this.onImage(`data:image/png;base64,${data.b64_json}`, prompt);
             }, signal);
           } else {
-            const first = files[0];
-            const dataUrl = await Atoms.fileToDataUrl(first);
-
+            const dataUrl = await Atoms.fileToDataUrl(files[0]);
             const body = {
               model: imageModel,
               messages: [{
-                role: "user",
+                role: 'user',
                 content: [
-                  { type: "text", text: prompt },
-                  { type: "image_url", image_url: { url: dataUrl } }
+                  { type: 'text', text: prompt },
+                  { type: 'image_url', image_url: { url: dataUrl } }
                 ]
               }],
               stream: true,
-              image_config: {
-                n: FIXED_IMAGE_N,
-                size,
-                response_format,
-                strength: strength || '0.75'
-              }
+              image_config: { n: FIXED_IMAGE_N, size, response_format, strength: strength || '0.75' }
             };
-
             await Atoms.apiPostStream('/chat/completions', body, (evt) => handleChatLikeStream(evt), signal);
           }
         } else {
-          if (imageModel === 'grok-imagine-1.0-fast') {
+          if (isFast) {
             const body = {
               model: imageModel,
-              messages: [{
-                role: "user",
-                content: [{ type: "text", text: prompt }]
-              }],
+              messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }],
               stream: true,
-              image_config: {
-                n: FIXED_IMAGE_N,
-                size,
-                response_format
-              }
+              image_config: { n: FIXED_IMAGE_N, size, response_format }
             };
-
             await Atoms.apiPostStream('/chat/completions', body, (evt) => handleChatLikeStream(evt), signal);
           } else {
             const body = {
@@ -1579,7 +1588,6 @@
               size,
               response_format
             };
-
             await Atoms.apiPostStream('/images/generations', body, (evt) => {
               const data = evt.data;
               if (data && Array.isArray(data.data)) {
@@ -1599,10 +1607,7 @@
           this.workerPromises = Array.from({ length: MAX_CONCURRENCY }).map(async () => {
             while (this.running) {
               try { await this.generateOneVideo(this.abortController.signal); }
-              catch (e) {
-                if (e.name === 'AbortError') break;
-                await new Promise(r => setTimeout(r, 900));
-              }
+              catch (e) { if (e.name === 'AbortError') break; await new Promise(r => setTimeout(r, 900)); }
               await new Promise(r => setTimeout(r, 150));
             }
           });
@@ -1611,10 +1616,7 @@
           this.workerPromises = Array.from({ length: MAX_CONCURRENCY }).map(async () => {
             while (this.running) {
               try { await generateOneImageBatch(this.abortController.signal); }
-              catch (e) {
-                if (e.name === 'AbortError') break;
-                await new Promise(r => setTimeout(r, 900));
-              }
+              catch (e) { if (e.name === 'AbortError') break; await new Promise(r => setTimeout(r, 900)); }
               await new Promise(r => setTimeout(r, 150));
             }
           });
@@ -1629,8 +1631,8 @@
   };
 
   function showConfigModal() {
-    elements.configBase.value = config.base;
-    elements.configKey.value = config.key;
+    elements.configBase.value       = config.base;
+    elements.configKey.value        = config.key;
     elements.configHistoryKey.value = config.historyKey;
     elements.configModal.classList.remove('hidden');
   }
@@ -1665,6 +1667,9 @@
     elements.themeToggle.addEventListener('click', () => Theme.cycle());
 
     if (!Config.isValid(config)) showConfigModal();
+
+    // PERF 3: 注册结果容器级事件委托（替代每张卡片的独立监听器）
+    setupResultsDelegation();
 
     await History.load();
     InputMolecule.init();
